@@ -1,0 +1,52 @@
+/* Element Plus 全局样式覆盖 - 深色主题 */
+
+/* Select 下拉框 */
+.el-select-dropdown {
+  background-color: rgba(30, 40, 70, 0.98) !important;
+  border: 1px solid rgba(64, 224, 255, 0.3) !important;
+  backdrop-filter: blur(10px);
+}
+
+.el-select-dropdown__item {
+  color: #e0e0e0 !important;
+  background-color: transparent !important;
+}
+
+.el-select-dropdown__item.hover,
+.el-select-dropdown__item:hover {
+  background-color: rgba(64, 224, 255, 0.2) !important;
+}
+
+.el-select-dropdown__item.is-selected {
+  color: #4facfe !important;
+  background-color: rgba(64, 224, 255, 0.15) !important;
+  font-weight: bold;
+}
+
+.el-select-group__title {
+  color: #4facfe !important;
+  font-weight: bold;
+  font-size: 0.85rem;
+}
+
+.el-select-dropdown__empty {
+  color: rgba(224, 224, 224, 0.5) !important;
+}
+
+/* Popper */
+.el-popper {
+  border: 1px solid rgba(64, 224, 255, 0.3) !important;
+}
+
+/* 滚动条样式 */
+.el-select-dropdown .el-scrollbar__wrap {
+  background-color: transparent;
+}
+
+.el-select-dropdown .el-scrollbar__thumb {
+  background-color: rgba(64, 224, 255, 0.3) !important;
+}
+
+.el-select-dropdown .el-scrollbar__thumb:hover {
+  background-color: rgba(64, 224, 255, 0.5) !important;
+}

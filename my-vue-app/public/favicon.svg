@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="planeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1d4ed8;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- 飞机主体 -->
+  <g fill="url(#planeGradient)">
+    <!-- 机身 -->
+    <ellipse cx="32" cy="32" rx="8" ry="22" />
+
+    <!-- 机翼 - 左 -->
+    <path d="M 32 26 Q 20 32 6 30 L 6 28 Q 20 26 32 24 Z" />
+
+    <!-- 机翼 - 右 -->
+    <path d="M 32 26 Q 44 32 58 30 L 58 28 Q 44 26 32 24 Z" />
+
+    <!-- 尾翼 - 上 -->
+    <path d="M 30 14 L 28 4 L 32 2 L 36 4 L 34 14 Z" />
+  </g>
+
+  <!-- 机身细节 -->
+  <ellipse cx="32" cy="32" rx="3" ry="12" fill="#60a5fa" opacity="0.6"/>
+
+  <!-- 窗户 -->
+  <circle cx="32" cy="20" r="1.5" fill="#ffffff" opacity="0.9"/>
+  <circle cx="32" cy="24" r="1.5" fill="#ffffff" opacity="0.9"/>
+  <circle cx="32" cy="28" r="1.5" fill="#ffffff" opacity="0.9"/>
+  <circle cx="32" cy="36" r="1.5" fill="#ffffff" opacity="0.9"/>
+  <circle cx="32" cy="40" r="1.5" fill="#ffffff" opacity="0.9"/>
+</svg>
