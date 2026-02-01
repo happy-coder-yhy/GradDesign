@@ -1,0 +1,11 @@
+{
+  "model": "glm-4.7",
+  "customModels": {
+    "glm-4.7": {
+      "provider": "custom",
+      "apiBase": "https://open.bigmodel.cn/api/paas/v4/",
+      "apiKey": "d9dbc651a80d4b0780a2a34e38ef3310.PoJ9nlEvMQxdcZqJ",
+      "model": "glm-4.7"
+    }
+  }
+}
