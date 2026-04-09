@@ -8,15 +8,6 @@ GraduationDesign/
 │   ├── __init__.py
 │   └── Astar.py        # A*算法实现
 │
-├── Neo4j/              # Neo4j数据库模块
-│   ├── __init__.py
-│   ├── main.py         # Neo4j数据导入脚本
-│   ├── check_db.py     # 检查数据库节点类型
-│   ├── check_edges.py  # 检查边的连接情况
-│   ├── check_connectivity.py  # 检查节点连通性
-│   ├── check_network_coords.py  # 检查网络坐标
-│   └── debug_path.py   # 调试路径查找
-│
 ├── api.py              # Flask API服务（主入口）
 ├── test_api.py         # API测试脚本
 ├── check_crs.py        # 检查坐标系统
@@ -51,19 +42,6 @@ graph.load_data()
 optimizer = AStarOptimizer(graph)
 ```
 
-### Neo4j模块
-包含Neo4j图数据库的连接、数据导入和查询功能。
-
-**主要脚本：**
-- `main.py`: 将SHP文件数据导入到Neo4j数据库
-- `check_*.py`: 各种数据库检查和调试脚本
-
-**使用示例：**
-```bash
-# 导入数据到Neo4j
-cd Neo4j
-python main.py
-```
 
 ### API服务
 提供HTTP接口的Flask应用，用于前端调用路径规划功能。
@@ -101,15 +79,11 @@ cp .env.example .env
 1. 在 `Algorithm/` 目录下创建新的算法文件
 2. 在 `Algorithm/__init__.py` 中导出新的类或函数
 
-### 添加新的Neo4j操作
-1. 在 `Neo4j/` 目录下创建新的脚本文件
-2. 使用现有的 `Neo4jConnection` 类或创建新的连接类
 
 ## 整理说明
 
 本次整理将项目按照功能模块进行了重组：
 - **Algorithm目录**: 存放所有算法相关的代码
-- **Neo4j目录**: 存放所有Neo4j数据库操作相关的代码
 - **根目录**: 保留API主入口、测试脚本和配置文件
 
 这样的结构使得项目更加清晰，便于维护和扩展。

@@ -1,29 +1,24 @@
 <template>
   <div class="home-content">
     <section class="algorithm-selection">
-      <h2>请选择优化算法</h2>
-      <div class="algorithm-grid">
-        <div 
-          v-for="(algo, index) in algorithms" 
-          :key="index" 
-          class="algorithm-card"
-          @click="selectAlgorithm(algo)"
-        >
-          <div class="icon">{{ algo.icon }}</div>
-          <h3>{{ algo.name }}</h3>
-          <p>{{ algo.description }}</p>
-        </div>
+      <!-- A*算法卡片 -->
+      <div
+        class="algorithm-card"
+        @click="selectAlgorithm(currentAlgorithm)"
+      >
+        <div class="icon">{{ currentAlgorithm.icon }}</div>
+        <h3>{{ currentAlgorithm.name }}</h3>
+        <p>{{ currentAlgorithm.description }}</p>
       </div>
     </section>
-    
+
     <!-- 开发者信息 -->
     <section class="developer-info">
       <div class="info-card">
-        <h3>开发者信息</h3>
         <div class="info-content">
-          <p><span class="label">姓名:</span> <span class="value">许培红</span></p>
+          <p><span class="label">姓名:</span> <span class="value">袁皓宇</span></p>
           <p><span class="label">专业:</span> <span class="value">计算机科学与技术</span></p>
-          <p><span class="label">指导老师:</span> <span class="value">张三教授</span></p>
+          <p><span class="label">指导老师:</span> <span class="value">左海超</span></p>
         </div>
       </div>
     </section>
@@ -35,26 +30,12 @@ export default {
   name: 'HomePage',
   data() {
     return {
-      algorithms: [
-        {
-          name: 'A*算法',
-          description: '基于启发式的路径搜索算法，适用于静态环境下的最优路径规划',
-          icon: '🌟',
-          id: 'astar'
-        },
-        {
-          name: '遗传算法',
-          description: '模拟自然进化过程的全局优化算法，适用于复杂约束条件',
-          icon: '🧬',
-          id: 'genetic'
-        },
-        {
-          name: '混合整数动态规划',
-          description: '结合离散与连续变量的优化方法，处理多阶段决策问题',
-          icon: '📊',
-          id: 'mixed-integer'
-        }
-      ]
+      currentAlgorithm: {
+        name: '多目标A*算法+多航班调度机制+2D可视化',
+        description: '基于多目标A*算法的机场场面滑行轨迹优化，集成多航班调度策略，实现冲突检测与消解，提供2D可视化演示',
+        icon: '✈️',
+        id: 'astar'
+      }
     }
   },
   methods: {
@@ -72,43 +53,18 @@ export default {
 }
 
 .algorithm-selection {
-  margin-bottom: 5rem;
-  text-align: center;
-}
-
-.algorithm-selection h2 {
-  font-size: 1.8rem;
   margin-bottom: 2rem;
-  background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  position: relative;
-  display: inline-block;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
-.algorithm-selection h2::after {
-  content: '';
-  position: absolute;
-  bottom: -10px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 60px;
-  height: 3px;
-  background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
-  border-radius: 3px;
-}
 
-.algorithm-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 3rem;
-  margin: 3rem 2rem;
-}
 
 .algorithm-card {
   background: rgba(20, 30, 60, 0.6);
   border-radius: 10px;
-  padding: 2.5rem 2rem;
+  padding: 2.5rem 3rem;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
   transition: all 0.4s ease;
   cursor: pointer;
@@ -117,6 +73,8 @@ export default {
   backdrop-filter: blur(5px);
   position: relative;
   overflow: hidden;
+  max-width: 850px;
+  width: 100%;
 }
 
 .algorithm-card::before {
@@ -146,13 +104,13 @@ export default {
 }
 
 .algorithm-card .icon {
-  font-size: 3rem;
-  margin-bottom: 1rem;
+  font-size: 3.5rem;
+  margin-bottom: 1.2rem;
 }
 
 .algorithm-card h3 {
-  font-size: 1.4rem;
-  margin-bottom: 1rem;
+  font-size: 1.5rem;
+  margin-bottom: 1.2rem;
   background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -161,10 +119,13 @@ export default {
 .algorithm-card p {
   color: #a0b3c6;
   line-height: 1.6;
+  max-width: 550px;
+  margin: 0 auto;
+  font-size: 1.05rem;
 }
 
 .developer-info {
-  margin-top: 2rem;
+  margin-top: 1px;
   text-align: center;
 }
 
@@ -213,19 +174,33 @@ export default {
 }
 
 @media (max-width: 768px) {
-  .algorithm-grid {
-    grid-template-columns: 1fr;
+  .algorithm-card {
+    max-width: 90%;
+    padding: 2rem 1.5rem;
   }
-  
+
+  .algorithm-card .icon {
+    font-size: 3rem;
+  }
+
+  .algorithm-card h3 {
+    font-size: 1.4rem;
+  }
+
+  .algorithm-card p {
+    font-size: 1rem;
+    max-width: 100%;
+  }
+
   .info-content p {
     flex-direction: column;
     align-items: flex-start;
   }
-  
+
   .label {
     margin-bottom: 0.3rem;
   }
-  
+
   .value {
     text-align: left;
   }
