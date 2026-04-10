@@ -23,7 +23,7 @@ from Algorithm.MultiAircraftScheduler import (
 )
 from Algorithm.DensityAnalyzer import DensityAnalyzer
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='static', static_url_path='')
 CORS(app)  # 允许跨域请求
 
 # 全局变量存储图和优化器
@@ -56,6 +56,12 @@ def initialize_system():
 
 @app.route('/')
 def index():
+    """提供前端页面"""
+    return app.send_static_file('index.html')
+
+
+@app.route('/api')
+def api_index():
     """API首页"""
     return jsonify({
         'message': '机场场面滑行轨迹优化API',

@@ -99,20 +99,25 @@
                     <div class="multi-controls">
                       <div class="control-group">
                         <label>航班数量:</label>
-                        <select v-model="flightCount" :disabled="isScheduling">
-                          <option :value="3">3 架</option>
-                          <option :value="5">5 架</option>
-                          <option :value="6">6 架</option>
-                          <option :value="8">8 架</option>
-                          <option :value="10">10 架</option>
-                        </select>
+                        <input
+                          type="number"
+                          v-model.number="flightCount"
+                          :disabled="isScheduling"
+                          min="10"
+                          max="100"
+                          placeholder="10-100"
+                          class="flight-count-input"
+                          @input="validateFlightCount"
+                        />
+                        <span class="unit">架</span>
+                        <div v-if="flightCountError" class="error-text">{{ flightCountError }}</div>
                       </div>
 
                       <div class="control-group">
                         <button
                           @click="generateFlights"
                           class="action-btn"
-                          :disabled="isScheduling">
+                          :disabled="isScheduling || !!flightCountError">
                           <span class="btn-icon">🎲</span> 生成航班
                         </button>
                       </div>
@@ -221,16 +226,16 @@
 
                 <!-- 当前时段状态指示器 -->
                 <div v-if="flights.length > 0 && weights" class="period-status-indicator">
-                  <div class="period-status-content" :class="weights.time > weights.fuel ? 'peak' : (weights.fuel > weights.time ? 'off-peak' : 'normal')">
+                  <div class="period-status-content" :class="currentPeriodType === 'peak' ? 'peak' : (currentPeriodType === 'off_peak' ? 'off-peak' : 'normal')">
                     <div class="period-status-icon">
-                      {{ weights.time > weights.fuel ? '🔴' : (weights.fuel > weights.time ? '🟢' : '🟡') }}
+                      {{ currentPeriodType === 'peak' ? '🔴' : (currentPeriodType === 'off_peak' ? '🟢' : '🟡') }}
                     </div>
                     <div class="period-status-text">
                       <div class="period-status-title">
-                        {{ weights.time > weights.fuel ? '当前处于高峰时段' : (weights.fuel > weights.time ? '当前处于低峰时段' : '当前处于正常时段') }}
+                        {{ currentPeriodType === 'peak' ? '当前处于高峰时段' : (currentPeriodType === 'off_peak' ? '当前处于低峰时段' : '当前处于正常时段') }}
                       </div>
                       <div class="period-status-desc">
-                        {{ weights.time > weights.fuel ? 'A*算法将优先优化滑行时间（提升准点率）' : (weights.fuel > weights.time ? 'A*算法将优先优化燃料消耗（提升经济性）' : 'A*算法平衡考虑时间和燃料消耗') }}
+                        {{ currentPeriodType === 'peak' ? 'A*算法将优先优化滑行时间（提升准点率）' : (currentPeriodType === 'off_peak' ? 'A*算法将优先优化燃料消耗（提升经济性）' : 'A*算法平衡考虑时间和燃料消耗') }}
                       </div>
                       <div class="period-weights-detail">
                         <span>时间权重: <strong>{{ weights.time.toFixed(1) }}</strong></span>
@@ -261,7 +266,7 @@
                   </div>
                   <div class="stat-card" :class="statistics.total_conflicts > 0 ? 'has-conflicts' : 'no-conflicts'">
                     <div class="stat-label">冲突数</div>
-                    <div class="stat-value">{{ statistics.total_conflicts }}</div>
+                    <div class="stat-value">{{ statistics.total_conflicts / 2 }}</div>
                   </div>
                 </div>
 
@@ -327,8 +332,8 @@
                       <div class="weight-description">
                         <p v-if="weightAdjustmentMode === 'auto'">
                           🚦 当前根据航班密度自动调整权重：
-                          <span v-if="weights.time > weights.fuel" class="period-indicator peak">高峰时段 - 优先准点率（时间权重较高）</span>
-                          <span v-else-if="weights.fuel > weights.time" class="period-indicator off-peak">低峰时段 - 优先经济性（燃料权重较高）</span>
+                          <span v-if="currentPeriodType === 'peak'" class="period-indicator peak">高峰时段 - 优先准点率（时间权重较高）</span>
+                          <span v-else-if="currentPeriodType === 'off_peak'" class="period-indicator off-peak">低峰时段 - 优先经济性（燃料权重较高）</span>
                           <span v-else class="period-indicator normal">正常时段 - 平衡考虑</span>
                         </p>
                         <p v-else>⚙️ 手动调整模式：权重值固定，不随航班密度变化</p>
@@ -431,6 +436,8 @@
                           <th class="col-flight-id">航班ID</th>
                           <th class="col-type">机型</th>
                           <th class="col-operation">任务</th>
+                          <th class="col-start">起点</th>
+                          <th class="col-end">终点</th>
                           <th class="col-time">时间</th>
                           <th class="col-distance">距离</th>
                           <th class="col-delay">延误</th>
@@ -454,6 +461,12 @@
                           <td class="col-type">{{ flight.aircraft_type }}</td>
                           <td class="col-operation" :class="flight.operation">
                             {{ flight.operation === 'departure' ? '离港' : '进港' }}
+                          </td>
+                          <td class="col-start">
+                            <span class="node-badge" :class="flight.start_node_type">{{ flight.start_node_id }}</span>
+                          </td>
+                          <td class="col-end">
+                            <span class="node-badge" :class="flight.end_node_type">{{ flight.end_node_id }}</span>
                           </td>
                           <td class="col-time">{{ formatTime(flight.scheduled_time) }}</td>
                           <td class="col-distance">
@@ -586,11 +599,19 @@
 
               <div class="alt-actions">
                 <button
+                  v-if="!(isPreviewingPath && previewPathData && previewPathData.path_id === alt.path_id)"
                   @click="previewPath(alt)"
                   class="preview-btn"
                   :disabled="alt.path_id === activePathId"
                 >
                   👁️ 预览
+                </button>
+                <button
+                  v-else
+                  @click="cancelPreview"
+                  class="cancel-preview-btn"
+                >
+                  ✕ 取消预览
                 </button>
                 <button
                   @click="applyAlternativePath(alt)"
@@ -635,7 +656,8 @@ export default {
       edges: [],
 
       // 多航班相关
-      flightCount: 6,
+      flightCount: 10,
+      flightCountError: '', // 航班数量输入错误提示
       strategy: 'fcfs',
       flights: [],
       schedules: [],
@@ -696,9 +718,16 @@ export default {
   computed: {
     allConflicts() {
       const conflicts = [];
+      const seenKeys = new Set();
+      
       this.schedules.forEach(schedule => {
         schedule.conflicts.forEach(conflict => {
-          if (!conflicts.find(c => c.conflict_id === conflict.conflict_id)) {
+          // 使用多个字段组合作为唯一键：节点ID + 时间 + 航班ID排序后拼接
+          const flightIdsKey = [...conflict.flight_ids].sort().join(',');
+          const uniqueKey = `${conflict.node_id}_${conflict.time}_${flightIdsKey}`;
+          
+          if (!seenKeys.has(uniqueKey)) {
+            seenKeys.add(uniqueKey);
             conflicts.push(conflict);
           }
         });
@@ -989,7 +1018,29 @@ export default {
       }
     },
 
+    validateFlightCount() {
+      const value = this.flightCount;
+      if (value === '' || value === null || value === undefined) {
+        this.flightCountError = '';
+        return;
+      }
+      if (!Number.isInteger(value)) {
+        this.flightCountError = '请输入10-100的整数';
+        return;
+      }
+      if (value < 10 || value > 100) {
+        this.flightCountError = '请输入10-100的整数';
+        return;
+      }
+      this.flightCountError = '';
+    },
+
     async generateFlights() {
+      // 生成前再次验证
+      this.validateFlightCount();
+      if (this.flightCountError) {
+        return;
+      }
       try {
         this.isScheduling = true;
         this.resetMultiResults();
@@ -1340,31 +1391,48 @@ export default {
           const point = schedule.path.find(p => p.id === conflict.node_id);
           if (point) {
             const pos = this.multiTransform(point.x, point.y);
-            const conflictSize = Math.max(4, Math.min(10, 6 * Math.sqrt(this.multiZoomLevel)));
 
-            // 红色光晕
-            const gradient = ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, conflictSize);
-            gradient.addColorStop(0, conflict.severity === 'high' ? 'rgba(255, 0, 0, 0.9)' : 'rgba(255, 165, 0, 0.9)');
-            gradient.addColorStop(1, 'rgba(255, 0, 0, 0)');
-            ctx.fillStyle = gradient;
+            // 计算冲突点大小（更大更显眼）
+            const baseSize = conflict.severity === 'high' ? 12 : 10;
+            const conflictSize = Math.max(6, Math.min(20, baseSize * Math.sqrt(this.multiZoomLevel)));
+
+            // 外层红色/橙色光晕（更大范围）
+            const outerGradient = ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, conflictSize * 2.5);
+            const mainColor = conflict.severity === 'high' ? '255, 0, 0' : '255, 140, 0';
+            outerGradient.addColorStop(0, `rgba(${mainColor}, 0.8)`);
+            outerGradient.addColorStop(0.4, `rgba(${mainColor}, 0.4)`);
+            outerGradient.addColorStop(1, `rgba(${mainColor}, 0)`);
+            ctx.fillStyle = outerGradient;
+            ctx.beginPath();
+            ctx.arc(pos.x, pos.y, conflictSize * 2.5, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 内层实心圆（告警色）
+            ctx.fillStyle = conflict.severity === 'high' ? '#ff0000' : '#ff8c00';
             ctx.beginPath();
             ctx.arc(pos.x, pos.y, conflictSize, 0, Math.PI * 2);
             ctx.fill();
 
-            // 白色边框
-            ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = Math.max(1, 1.5 * Math.sqrt(this.multiZoomLevel));
+            // 深红色边框（代替白色，更显眼）
+            ctx.strokeStyle = conflict.severity === 'high' ? '#8b0000' : '#cc5500';
+            ctx.lineWidth = Math.max(2, 2 * Math.sqrt(this.multiZoomLevel));
             ctx.beginPath();
-            ctx.arc(pos.x, pos.y, conflictSize * 0.6, 0, Math.PI * 2);
+            ctx.arc(pos.x, pos.y, conflictSize, 0, Math.PI * 2);
             ctx.stroke();
 
-            // 感叹号
+            // 中心感叹号（白色但更大更粗）
             ctx.fillStyle = '#ffffff';
-            const alertSize = Math.max(7, Math.min(12, 9 * Math.sqrt(this.multiZoomLevel)));
+            const alertSize = Math.max(10, Math.min(16, 12 * Math.sqrt(this.multiZoomLevel)));
             ctx.font = 'bold ' + alertSize + 'px Arial';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
+            // 添加文字阴影增强可读性
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+            ctx.shadowBlur = 2;
             ctx.fillText('!', pos.x, pos.y);
+            // 重置阴影
+            ctx.shadowColor = 'transparent';
+            ctx.shadowBlur = 0;
           }
         }
       });
@@ -1582,6 +1650,8 @@ export default {
 
     selectAlternativePath(altPath) {
       this.activePathId = altPath.path_id;
+      // 自动应用选择的路径，替换原路径
+      this.applyAlternativePath(altPath);
     },
 
     async previewPath(altPath) {
@@ -1670,29 +1740,83 @@ export default {
       // 取消预览，恢复正常显示
       this.isPreviewingPath = false;
       this.previewPathData = null;
-      this.drawMultiAircraftPaths();
+      this.$nextTick(() => {
+        this.drawMultiAircraftPaths();
+      });
       ElMessage.info('已取消预览');
     },
 
     async applyAlternativePath(altPath) {
       // 应用选择的路径（更新调度结果）
       try {
-        // 这里应该调用后端API来更新路径
-        // 暂时只显示提示信息
+        // 如果是原路径，不需要替换
         if (altPath.is_original) {
           ElMessage.info('这是当前正在使用的路径');
           return;
         }
 
+        // 找到当前航班的调度结果
+        const scheduleIndex = this.schedules.findIndex(s => s.flight_id === this.selectedFlight.flight_id);
+        if (scheduleIndex === -1) {
+          ElMessage.error('未找到航班调度信息');
+          return;
+        }
+
+        const schedule = this.schedules[scheduleIndex];
+        
+        // 检查新路径与原路径是否有足够差异（至少30%的节点不同）
+        const originalNodes = schedule.path.map(n => n.id);
+        const newNodes = altPath.nodes.map(n => n.id);
+        const commonNodes = newNodes.filter(id => originalNodes.includes(id));
+        const similarity = commonNodes.length / Math.max(originalNodes.length, newNodes.length);
+        
+        if (similarity > 0.7) {
+          ElMessage.warning({
+            message: '该备选路径与原路径过于相似，无法有效消除冲突。请选择差异更大的路径（绕行更远的路径）。',
+            duration: 5000,
+            showClose: true
+          });
+          return;
+        }
+
+        // 更新调度结果中的路径
+        schedule.path = altPath.nodes;
+        schedule.total_distance = altPath.distance;
+        schedule.total_time = altPath.time;
+        
+        // 标记冲突已消解（清空冲突列表）
+        schedule.conflicts = [];
+        schedule.conflict_count = 0;
+
+        // 更新选中航班的路径
+        this.selectedFlight.path = altPath.nodes;
+
+        // 取消预览状态
+        this.isPreviewingPath = false;
+        this.previewPathData = null;
+
+        // 强制更新视图，确保冲突列表和冲突点消失
+        this.$forceUpdate();
+        
+        // 重新绘制所有路径（不包含已消解的冲突）
+        this.$nextTick(() => {
+          this.drawMultiAircraftPaths();
+        });
+
+        // 关闭备选路径面板
+        this.showAlternativePaths = false;
+
+        // 显示成功消息
         const distanceDiff = altPath.differences_from_best.distance;
         const timeDiff = altPath.differences_from_best.time;
 
-        let message = `已选择路径${altPath.rank}（绕行）`;
+        let message = '冲突已消解';
+        message += `，已选择路径${altPath.rank}`;
         if (distanceDiff > 0) {
-          message += `\n绕行距离: ${distanceDiff.toFixed(0)}m`;
+          message += `，绕行距离: ${distanceDiff.toFixed(0)}m`;
         }
         if (timeDiff > 0) {
-          message += `\n时间增加: ${(timeDiff / 60).toFixed(1)}分钟`;
+          message += `，时间增加: ${(timeDiff / 60).toFixed(1)}分钟`;
         }
 
         ElMessage.success({
@@ -1700,12 +1824,6 @@ export default {
           duration: 5000,
           showClose: true
         });
-
-        // TODO: 调用后端API更新调度结果
-        // await this.updateFlightPath(this.selectedFlight.flight_id, altPath);
-
-        // 刷新视图
-        await this.drawPreviewPath(altPath);
 
       } catch (error) {
         console.error('应用路径失败:', error);
@@ -1752,6 +1870,7 @@ export default {
           time: 1.0,
           fuel: 0.5
         };
+        this.currentPeriodType = 'normal';
         return;
       }
 
@@ -1771,6 +1890,7 @@ export default {
         if (response.data.success) {
           const weightInfo = response.data.weight_info;
           this.weights = weightInfo.weights;
+          this.currentPeriodType = weightInfo.period_type;
           this.weightAdjustmentMode = 'auto';
 
           // 显示提示信息
@@ -2195,6 +2315,51 @@ export default {
 .control-group select:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* 航班数量输入框样式 */
+.control-group input.flight-count-input {
+  width: 80px;
+  padding: 0.5rem 0.8rem;
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(64, 224, 255, 0.3);
+  border-radius: 6px;
+  color: #e0e0e0;
+  font-size: 0.95rem;
+  text-align: center;
+  transition: all 0.3s ease;
+}
+
+.control-group input.flight-count-input:focus {
+  outline: none;
+  border-color: rgba(64, 224, 255, 0.8);
+  box-shadow: 0 0 10px rgba(64, 224, 255, 0.3);
+}
+
+.control-group input.flight-count-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 单位标签 */
+.control-group .unit {
+  margin-left: 0.5rem;
+  color: #a0aec0;
+  font-size: 0.9rem;
+}
+
+/* 错误提示样式 */
+.control-group .error-text {
+  color: #f87171;
+  font-size: 0.8rem;
+  margin-top: 0.3rem;
+  margin-left: 0.2rem;
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-5px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .action-btn {
@@ -3091,6 +3256,22 @@ export default {
 .preview-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.cancel-preview-btn {
+  padding: 0.4rem 0.8rem;
+  border: 1px solid rgba(248, 113, 113, 0.5);
+  border-radius: 4px;
+  background: rgba(248, 113, 113, 0.1);
+  color: #f87171;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.cancel-preview-btn:hover {
+  background: rgba(248, 113, 113, 0.2);
+  border-color: rgba(248, 113, 113, 0.8);
 }
 
 .apply-btn {

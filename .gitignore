@@ -76,6 +76,9 @@ docs/
 GraduationDesign/西安机场/
 GraduationDesign/参考文献/
 
+# 前端打包生成的静态文件
+GraduationDesign/static/
+
 *.docx
 
 prompt.txt

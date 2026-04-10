@@ -108,6 +108,7 @@ class DensityAnalyzer:
         densities = [count / (self.time_window_minutes / 60) for count in window_counts]
 
         # 6. 识别高峰期和低峰期
+        # 采用四分位距法(IQR)结合标准差法，参考交通工程领域标准
         if len(densities) > 0:
             avg_density = statistics.mean(densities)
 
@@ -115,11 +116,44 @@ class DensityAnalyzer:
             off_peak_windows = []
             normal_windows = []
 
+            # 计算统计量用于更科学的高峰判断
+            if len(densities) >= 4:
+                # 四分位距法 (IQR Method)
+                sorted_densities = sorted(densities)
+                q1 = statistics.quantiles(sorted_densities, n=4)[0]  # 第25百分位数
+                q3 = statistics.quantiles(sorted_densities, n=4)[2]  # 第75百分位数
+                iqr = q3 - q1
+
+                # 标准差法
+                std_density = statistics.stdev(densities) if len(densities) > 1 else 0
+
+                # 综合阈值计算
+                # 高峰期阈值：取 Q3 + 1.5*IQR 和 均值 + 0.5*标准差 的较小值
+                # 这种方法参考了箱线图异常值检测和交通流量分析的标准做法
+                peak_threshold_value = min(
+                    q3 + 1.5 * iqr,
+                    avg_density + 0.5 * std_density if std_density > 0 else avg_density * 1.3
+                )
+
+                # 低峰期阈值：取 Q1 - 1.5*IQR 和 均值 - 0.5*标准差 的较大值
+                off_peak_threshold_value = max(
+                    q1 - 1.5 * iqr if q1 > 1.5 * iqr else 0,
+                    avg_density - 0.5 * std_density if std_density > 0 else avg_density * 0.7
+                )
+
+                # 确保阈值合理性
+                peak_threshold_value = max(peak_threshold_value, avg_density * 1.2)
+                off_peak_threshold_value = min(off_peak_threshold_value, avg_density * 0.8)
+            else:
+                # 数据点较少时，使用基于平均值的相对阈值
+                peak_threshold_value = avg_density * (1 + self.peak_threshold)
+                off_peak_threshold_value = avg_density * (1 - self.peak_threshold)
+
             for i, density in enumerate(densities):
-                # 使用百分比阈值方法
-                if density >= avg_density * (1 + self.peak_threshold):
+                # 使用综合阈值方法判断
+                if density >= peak_threshold_value:
                     peak_windows.append(time_windows[i])
-                elif density <= avg_density * (1 - self.peak_threshold):
+                elif density <= off_peak_threshold_value:
                     off_peak_windows.append(time_windows[i])
                 else:
                     normal_windows.append(time_windows[i])
@@ -174,17 +208,41 @@ class DensityAnalyzer:
                 else:
                     return 'normal'
 
-        # 如果查询时间不在任何窗口内，根据整体密度推断
+        # 如果查询时间不在任何窗口内，根据机场运营规律推断
+        # 参考机场运营数据：繁忙时段通常为 7:00-10:00 和 17:00-21:00
         avg_density = analysis['average_density']
         if avg_density > 0:
-            # 简单基于时间的推断：白天可能是高峰期
             hour = query_time.hour
-            if 7 <= hour <= 10 or 17 <= hour <= 20:  # 早晚高峰
-                return 'peak'
-            elif 0 <= hour <= 5:  # 深夜低峰
-                return 'off_peak'
+            weekday = query_time.weekday()  # 0=周一, 6=周日
+
+            # 判断是否为工作日
+            is_weekday = weekday < 5
+
+            if is_weekday:
+                # 工作日高峰判断
+                # 早高峰：7:00-10:00（出港高峰）
+                # 晚高峰：17:00-21:00（进港高峰）
+                if (7 <= hour <= 10) or (17 <= hour <= 21):
+                    return 'peak'
+                # 次高峰：11:00-12:00, 14:00-16:00
+                elif (11 <= hour <= 12) or (14 <= hour <= 16):
+                    return 'normal'
+                # 低峰：0:00-6:00, 13:00, 22:00-23:00
+                elif (0 <= hour <= 6) or hour == 13 or (22 <= hour <= 23):
+                    return 'off_peak'
+                else:
+                    return 'normal'
             else:
-                return 'normal'
+                # 周末高峰判断（相对分散）
+                # 周末上午高峰推迟：9:00-12:00
+                # 周末下午/晚上高峰：15:00-20:00
+                if (9 <= hour <= 12) or (15 <= hour <= 20):
+                    return 'peak'
+                # 周末低峰：0:00-8:00, 21:00-23:00
+                elif (0 <= hour <= 8) or (21 <= hour <= 23):
+                    return 'off_peak'
+                else:
+                    return 'normal'
 
         return 'unknown'
 
