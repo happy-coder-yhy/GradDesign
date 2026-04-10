@@ -21,6 +21,7 @@ from Algorithm.MultiAircraftScheduler import (
     PriorityLevel,
     generate_simulation_data
 )
+from Algorithm.DensityAnalyzer import DensityAnalyzer
 
 app = Flask(__name__)
 CORS(app)  # 允许跨域请求
@@ -67,7 +68,9 @@ def index():
             '/api/demo/farthest-stand': '获取距离最远的机位对',
             '/api/demo/stand-to-runway': '获取机位到跑道点',
             '/api/multi-aircraft/generate-simulation': '生成模拟航班数据（POST）',
-            '/api/multi-aircraft/schedule': '多航班调度（POST）'
+            '/api/multi-aircraft/schedule': '多航班调度（POST）',
+            '/api/density/analyze': '航班密度分析（POST）',
+            '/api/density/current-weights': '获取当前权重（POST）'
         }
     })
 
@@ -636,7 +639,8 @@ def schedule_multi_aircraft():
                     'total_time': schedule.total_time,
                     'delay': schedule.delay.total_seconds(),
                     'conflicts': conflicts_data,
-                    'conflict_count': len(conflicts_data)
+                    'conflict_count': len(conflicts_data),
+                    'weights': schedule.weights  # 动态权重配置
                 })
             except Exception as e:
                 print(f"[API] 处理调度结果时出错: {e}")
@@ -759,6 +763,227 @@ def generate_simulation():
     except Exception as e:
         import traceback
         print(f"[API] 错误: {e}")
+        traceback.print_exc()
+
+        error_response = jsonify({
+            'success': False,
+            'error': str(e),
+            'error_type': type(e).__name__
+        })
+        error_response.headers.add('Access-Control-Allow-Origin', '*')
+        return error_response, 500
+
+
+# ==================== 航班密度分析API ====================
+
+@app.route('/api/density/analyze', methods=['POST', 'OPTIONS'])
+def analyze_density():
+    """
+    分析航班密度，识别高峰期和低峰期
+    POST数据格式:
+    {
+        "flights": [...],  # 航班列表，格式同多航班调度接口
+        "time_window_minutes": 30,  # 可选，时间窗口大小（分钟）
+        "peak_threshold": 0.6       # 可选，高峰期阈值（0-1）
+    }
+    """
+    # 处理OPTIONS请求（CORS预检）
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        return response
+
+    try:
+        data = request.get_json(force=True, silent=True)
+        if data is None:
+            data = {}
+
+        flights_data = data.get('flights', [])
+        time_window_minutes = data.get('time_window_minutes', 30)
+        peak_threshold = data.get('peak_threshold', 0.6)
+
+        if not flights_data:
+            error_response = jsonify({
+                'success': False,
+                'error': '请提供航班数据'
+            })
+            error_response.headers.add('Access-Control-Allow-Origin', '*')
+            return error_response, 400
+
+        # 创建DensityAnalyzer实例
+        analyzer = DensityAnalyzer(
+            time_window_minutes=time_window_minutes,
+            peak_threshold=peak_threshold
+        )
+
+        # 构建Flight对象列表
+        flights = []
+        for flight_data in flights_data:
+            try:
+                # 解析计划时间
+                from datetime import datetime
+                scheduled_time = datetime.strptime(flight_data['scheduled_time'], '%Y-%m-%d %H:%M:%S')
+
+                # 创建Flight对象（简化版，只需要时间信息）
+                flight = Flight(
+                    flight_id=flight_data['flight_id'],
+                    aircraft_type=flight_data.get('aircraft_type', 'A320'),
+                    operation=OperationType.DEPARTURE if flight_data['operation'] == 'departure' else OperationType.ARRIVAL,
+                    start_node=None,  # 不需要具体节点
+                    end_node=None,
+                    scheduled_time=scheduled_time,
+                    priority=PriorityLevel.MEDIUM
+                )
+                flights.append(flight)
+            except Exception as e:
+                print(f"[API] 处理航班 {flight_data.get('flight_id')} 时出错: {e}")
+                continue
+
+        # 执行密度分析
+        analysis = analyzer.analyze_density(flights)
+
+        # 转换结果为可序列化格式
+        serializable_analysis = {
+            'time_windows': [(start.strftime('%Y-%m-%d %H:%M:%S'), end.strftime('%Y-%m-%d %H:%M:%S'))
+                            for start, end in analysis['time_windows']],
+            'densities': analysis['densities'],
+            'average_density': analysis['average_density'],
+            'peak_windows': [(start.strftime('%Y-%m-%d %H:%M:%S'), end.strftime('%Y-%m-%d %H:%M:%S'))
+                           for start, end in analysis['peak_windows']],
+            'off_peak_windows': [(start.strftime('%Y-%m-%d %H:%M:%S'), end.strftime('%Y-%m-%d %H:%M:%S'))
+                               for start, end in analysis['off_peak_windows']],
+            'normal_windows': [(start.strftime('%Y-%m-%d %H:%M:%S'), end.strftime('%Y-%m-%d %H:%M:%S'))
+                             for start, end in analysis['normal_windows']],
+            'flight_count': analysis['flight_count'],
+            'time_range': {
+                'start': analysis['time_range']['start'].strftime('%Y-%m-%d %H:%M:%S'),
+                'end': analysis['time_range']['end'].strftime('%Y-%m-%d %H:%M:%S'),
+                'duration_hours': analysis['time_range']['duration_hours']
+            }
+        }
+
+        response_data = {
+            'success': True,
+            'analysis': serializable_analysis,
+            'time_window_minutes': time_window_minutes,
+            'peak_threshold': peak_threshold
+        }
+
+        response = jsonify(response_data)
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        return response
+
+    except Exception as e:
+        import traceback
+        print(f"[API] 密度分析错误: {e}")
+        traceback.print_exc()
+
+        error_response = jsonify({
+            'success': False,
+            'error': str(e),
+            'error_type': type(e).__name__
+        })
+        error_response.headers.add('Access-Control-Allow-Origin', '*')
+        return error_response, 500
+
+
+@app.route('/api/density/current-weights', methods=['POST', 'OPTIONS'])
+def get_current_weights():
+    """
+    获取当前时间点的权重配置
+    POST数据格式:
+    {
+        "flights": [...],  # 航班列表，格式同多航班调度接口
+        "current_time": "2024-01-20 14:30:00",  # 可选，查询时间
+        "time_window_minutes": 30,  # 可选，时间窗口大小
+        "peak_threshold": 0.6       # 可选，高峰期阈值
+    }
+    """
+    # 处理OPTIONS请求（CORS预检）
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        return response
+
+    try:
+        data = request.get_json(force=True, silent=True)
+        if data is None:
+            data = {}
+
+        flights_data = data.get('flights', [])
+        current_time_str = data.get('current_time')
+        time_window_minutes = data.get('time_window_minutes', 30)
+        peak_threshold = data.get('peak_threshold', 0.6)
+
+        if not flights_data:
+            error_response = jsonify({
+                'success': False,
+                'error': '请提供航班数据'
+            })
+            error_response.headers.add('Access-Control-Allow-Origin', '*')
+            return error_response, 400
+
+        # 创建DensityAnalyzer实例
+        analyzer = DensityAnalyzer(
+            time_window_minutes=time_window_minutes,
+            peak_threshold=peak_threshold
+        )
+
+        # 构建Flight对象列表
+        flights = []
+        for flight_data in flights_data:
+            try:
+                from datetime import datetime
+                scheduled_time = datetime.strptime(flight_data['scheduled_time'], '%Y-%m-%d %H:%M:%S')
+
+                flight = Flight(
+                    flight_id=flight_data['flight_id'],
+                    aircraft_type=flight_data.get('aircraft_type', 'A320'),
+                    operation=OperationType.DEPARTURE if flight_data['operation'] == 'departure' else OperationType.ARRIVAL,
+                    start_node=None,
+                    end_node=None,
+                    scheduled_time=scheduled_time,
+                    priority=PriorityLevel.MEDIUM
+                )
+                flights.append(flight)
+            except Exception as e:
+                print(f"[API] 处理航班 {flight_data.get('flight_id')} 时出错: {e}")
+                continue
+
+        # 确定查询时间
+        from datetime import datetime
+        if current_time_str:
+            current_time = datetime.strptime(current_time_str, '%Y-%m-%d %H:%M:%S')
+        else:
+            current_time = datetime.now()
+
+        # 获取当前权重
+        weight_info = analyzer.get_current_weights(flights, current_time)
+
+        # 转换为可序列化格式
+        serializable_info = {
+            'period_type': weight_info['period_type'],
+            'weights': weight_info['weights'],
+            'description': weight_info['description'],
+            'current_time': weight_info['current_time'].strftime('%Y-%m-%d %H:%M:%S')
+        }
+
+        response_data = {
+            'success': True,
+            'weight_info': serializable_info
+        }
+
+        response = jsonify(response_data)
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        return response
+
+    except Exception as e:
+        import traceback
+        print(f"[API] 权重获取错误: {e}")
         traceback.print_exc()
 
         error_response = jsonify({

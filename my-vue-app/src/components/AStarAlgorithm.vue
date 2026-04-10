@@ -3,32 +3,34 @@
     <div class="grid-background"></div>
     <div class="particles"></div>
     <div class="container">
-      <h2 class="algorithm-title">A*算法详情</h2>
       <div class="algorithm-content">
-        <div class="intro-section">
-          <h3>算法简介</h3>
-          <p>A*（A-Star）算法是一种图形搜索算法，用于在有向图中搜索从起始顶点到目标顶点的最短路径。它使用启发式函数来评估从当前节点到目标节点的成本，从而选择最优路径。</p>
+        <!-- 顶部主Tab栏 -->
+        <div class="main-tab-container">
+          <div class="main-tab-buttons">
+            <button
+              class="main-tab-btn"
+              :class="{ active: activeMainTab === 'details' }"
+              @click="activeMainTab = 'details'">
+              <span class="main-tab-icon">📖</span>
+              算法详情
+            </button>
+            <button
+              class="main-tab-btn"
+              :class="{ active: activeMainTab === 'demo' }"
+              @click="activeMainTab = 'demo'">
+              <span class="main-tab-icon">🎮</span>
+              算法演示
+            </button>
+          </div>
         </div>
 
-        <div class="features-section">
-          <h3>算法特点</h3>
-          <ul>
-            <li>使用启发式函数估计从当前节点到目标节点的最小成本路径</li>
-            <li>结合Dijkstra算法的准确性和最佳优先搜索的速度</li>
-            <li>保证找到最优解（在启发函数满足特定条件下）</li>
-            <li>适用于静态环境下的最优路径规划</li>
-          </ul>
+        <!-- 算法详情 -->
+        <div v-show="activeMainTab === 'details'">
+          <AlgorithmDetails />
         </div>
 
-        <div class="application-section">
-          <h3>机场滑行应用</h3>
-          <p>在机场场面滑行轨迹优化中，A*算法可用于：</p>
-          <ul>
-            <li>寻找飞机从停机位到跑道的最短滑行路径</li>
-            <li>避开障碍物和其他飞机，避免冲突</li>
-            <li>考虑滑行时间、燃油消耗等优化目标</li>
-          </ul>
-        </div>
+        <!-- 算法演示 -->
+        <div v-show="activeMainTab === 'demo'">
 
         <div class="visualization-section">
           <h3>算法演示 - 西安机场路网</h3>
@@ -217,6 +219,28 @@
                   </div>
                 </div>
 
+                <!-- 当前时段状态指示器 -->
+                <div v-if="flights.length > 0 && weights" class="period-status-indicator">
+                  <div class="period-status-content" :class="weights.time > weights.fuel ? 'peak' : (weights.fuel > weights.time ? 'off-peak' : 'normal')">
+                    <div class="period-status-icon">
+                      {{ weights.time > weights.fuel ? '🔴' : (weights.fuel > weights.time ? '🟢' : '🟡') }}
+                    </div>
+                    <div class="period-status-text">
+                      <div class="period-status-title">
+                        {{ weights.time > weights.fuel ? '当前处于高峰时段' : (weights.fuel > weights.time ? '当前处于低峰时段' : '当前处于正常时段') }}
+                      </div>
+                      <div class="period-status-desc">
+                        {{ weights.time > weights.fuel ? 'A*算法将优先优化滑行时间（提升准点率）' : (weights.fuel > weights.time ? 'A*算法将优先优化燃料消耗（提升经济性）' : 'A*算法平衡考虑时间和燃料消耗') }}
+                      </div>
+                      <div class="period-weights-detail">
+                        <span>时间权重: <strong>{{ weights.time.toFixed(1) }}</strong></span>
+                        <span class="weight-separator">|</span>
+                        <span>燃料权重: <strong>{{ weights.fuel.toFixed(1) }}</strong></span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 <!-- 统计信息 -->
                 <div v-if="statistics" class="multi-stats">
                   <div class="stat-card">
@@ -238,6 +262,78 @@
                   <div class="stat-card" :class="statistics.total_conflicts > 0 ? 'has-conflicts' : 'no-conflicts'">
                     <div class="stat-label">冲突数</div>
                     <div class="stat-value">{{ statistics.total_conflicts }}</div>
+                  </div>
+                </div>
+
+                <!-- 时间段与权重信息 -->
+                <div v-if="timePeriodAnalysis || weights" class="period-weight-section">
+                  <h4>📊 时间段分析与权重配置</h4>
+                  <div class="period-weight-content">
+                    <!-- 时间段分析 -->
+                    <div v-if="timePeriodAnalysis" class="period-analysis">
+                      <div class="period-summary">
+                        <div class="period-item">
+                          <span class="period-label">航班密度分析：</span>
+                          <span class="period-value">{{ timePeriodAnalysis.flight_count }} 个航班</span>
+                        </div>
+                        <div class="period-item">
+                          <span class="period-label">时间范围：</span>
+                          <span class="period-value">{{ formatDateTime(timePeriodAnalysis.time_range.start) }} - {{ formatDateTime(timePeriodAnalysis.time_range.end) }}</span>
+                        </div>
+                        <div class="period-item">
+                          <span class="period-label">平均密度：</span>
+                          <span class="period-value">{{ timePeriodAnalysis.average_density.toFixed(2) }} 航班/小时</span>
+                        </div>
+                        <div class="period-item">
+                          <span class="period-label">高峰期窗口：</span>
+                          <span class="period-value">{{ timePeriodAnalysis.peak_windows.length }} 个</span>
+                        </div>
+                        <div class="period-item">
+                          <span class="period-label">低峰期窗口：</span>
+                          <span class="period-value">{{ timePeriodAnalysis.off_peak_windows.length }} 个</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- 权重配置 -->
+                    <div class="weight-config">
+                      <div class="weight-header">
+                        <div class="weight-title">
+                          <span>⚖️ 多目标A*算法权重</span>
+                          <span class="weight-mode">{{ weightAdjustmentMode === 'auto' ? '（自动调整）' : '（手动调整）' }}</span>
+                        </div>
+                        <div class="weight-controls">
+                          <button @click="adjustWeightsAuto" class="weight-btn auto" :disabled="weightAdjustmentMode === 'auto'">自动</button>
+                          <button @click="adjustWeightsManually" class="weight-btn manual" :disabled="weightAdjustmentMode === 'manual'">手动</button>
+                        </div>
+                      </div>
+                      <div class="weight-values">
+                        <div class="weight-item">
+                          <span class="weight-label">距离权重：</span>
+                          <span class="weight-value">{{ weights.distance.toFixed(1) }}</span>
+                          <span class="weight-desc">（最短路径）</span>
+                        </div>
+                        <div class="weight-item">
+                          <span class="weight-label">时间权重：</span>
+                          <span class="weight-value">{{ weights.time.toFixed(1) }}</span>
+                          <span class="weight-desc">（滑行时间）</span>
+                        </div>
+                        <div class="weight-item">
+                          <span class="weight-label">燃料权重：</span>
+                          <span class="weight-value">{{ weights.fuel.toFixed(1) }}</span>
+                          <span class="weight-desc">（燃料消耗）</span>
+                        </div>
+                      </div>
+                      <div class="weight-description">
+                        <p v-if="weightAdjustmentMode === 'auto'">
+                          🚦 当前根据航班密度自动调整权重：
+                          <span v-if="weights.time > weights.fuel" class="period-indicator peak">高峰时段 - 优先准点率（时间权重较高）</span>
+                          <span v-else-if="weights.fuel > weights.time" class="period-indicator off-peak">低峰时段 - 优先经济性（燃料权重较高）</span>
+                          <span v-else class="period-indicator normal">正常时段 - 平衡考虑</span>
+                        </p>
+                        <p v-else>⚙️ 手动调整模式：权重值固定，不随航班密度变化</p>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -404,8 +500,9 @@
             </div>
           </div>
         </div>
+        </div>
 
-        <button class="back-btn" @click="goBack">返回算法选择</button>
+        <button class="back-btn" @click="goBack">返回首页</button>
       </div>
     </div>
 
@@ -518,6 +615,7 @@
 <script>
 import axios from 'axios';
 import NetworkVisualization from './NetworkVisualization.vue';
+import AlgorithmDetails from './AlgorithmDetails.vue';
 import * as XLSX from 'xlsx';
 import { ElMessage } from 'element-plus';
 
@@ -526,11 +624,13 @@ const API_BASE = 'http://localhost:5001/api';
 export default {
   name: 'AStarAlgorithm',
   components: {
-    NetworkVisualization
+    NetworkVisualization,
+    AlgorithmDetails
   },
   data() {
     return {
       activeTab: 'single', // 'single' 或 'multi'
+      activeMainTab: 'details', // 'details' 或 'demo'
       nodes: [],
       edges: [],
 
@@ -576,7 +676,21 @@ export default {
       multiDragStart: { x: 0, y: 0 },
       multiBaseScale: 1.0,
       multiBaseOffsetX: 0,
-      multiBaseOffsetY: 0
+      multiBaseOffsetY: 0,
+
+      // 航班密度分析和权重动态调整
+      flightDensity: null,
+      peakPeriods: [],
+      offPeakPeriods: [],
+      timePeriodAnalysis: null,
+      weights: {
+        distance: 1.0,
+        time: 1.0,      // 滑行时间权重
+        fuel: 0.5       // 燃料损耗权重
+      },
+      weightAdjustmentMode: 'auto', // 'auto' 或 'manual'
+      peakThreshold: 0.6, // 高峰期阈值（密度百分比）
+      timeWindowSize: 30, // 时间窗口大小（分钟）
     }
   },
   computed: {
@@ -887,6 +1001,8 @@ export default {
 
         if (response.data.success) {
           this.flights = response.data.flights;
+          // 分析航班密度
+          await this.analyzeFlightDensity();
         }
       } catch (error) {
         console.error('生成航班失败:', error);
@@ -1332,6 +1448,11 @@ export default {
       const date = new Date(timeStr);
       return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
     },
+    formatDateTime(dateTimeStr) {
+      if (!dateTimeStr) return '-';
+      const date = new Date(dateTimeStr);
+      return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+    },
 
     getConflictTypeText(type) {
       const map = {
@@ -1590,6 +1711,96 @@ export default {
         console.error('应用路径失败:', error);
         ElMessage.error('应用路径失败');
       }
+    },
+
+    // ========== 航班密度分析和权重动态调整 ==========
+    async analyzeFlightDensity() {
+      if (!this.flights.length) {
+        this.flightDensity = null;
+        this.peakPeriods = [];
+        this.offPeakPeriods = [];
+        this.timePeriodAnalysis = null;
+        return;
+      }
+
+      try {
+        const response = await axios.post(`${API_BASE}/density/analyze`, {
+          flights: this.flights,
+          time_window_minutes: this.timeWindowSize,
+          peak_threshold: this.peakThreshold
+        });
+
+        if (response.data.success) {
+          this.flightDensity = response.data.analysis;
+          this.peakPeriods = response.data.analysis.peak_windows;
+          this.offPeakPeriods = response.data.analysis.off_peak_windows;
+          this.timePeriodAnalysis = response.data.analysis;
+
+          // 同时获取当前权重
+          await this.updateCurrentWeights();
+        }
+      } catch (error) {
+        console.error('航班密度分析失败:', error);
+        ElMessage.error('航班密度分析失败: ' + error.message);
+      }
+    },
+
+    async updateCurrentWeights(currentTime = null) {
+      if (!this.flights.length) {
+        this.weights = {
+          distance: 1.0,
+          time: 1.0,
+          fuel: 0.5
+        };
+        return;
+      }
+
+      try {
+        const requestData = {
+          flights: this.flights,
+          time_window_minutes: this.timeWindowSize,
+          peak_threshold: this.peakThreshold
+        };
+
+        if (currentTime) {
+          requestData.current_time = currentTime;
+        }
+
+        const response = await axios.post(`${API_BASE}/density/current-weights`, requestData);
+
+        if (response.data.success) {
+          const weightInfo = response.data.weight_info;
+          this.weights = weightInfo.weights;
+          this.weightAdjustmentMode = 'auto';
+
+          // 显示提示信息
+          ElMessage.success({
+            message: `当前时间段: ${weightInfo.description}`,
+            duration: 3000,
+            showClose: true
+          });
+        }
+      } catch (error) {
+        console.error('获取当前权重失败:', error);
+        ElMessage.error('获取当前权重失败: ' + error.message);
+      }
+    },
+
+    // 手动调整权重
+    adjustWeightsManually() {
+      this.weightAdjustmentMode = 'manual';
+      ElMessage.info('已切换到手动权重调整模式');
+    },
+
+    // 自动调整权重
+    adjustWeightsAuto() {
+      this.weightAdjustmentMode = 'auto';
+      this.updateCurrentWeights();
+    },
+
+    // 更新权重参数
+    updateWeightParams() {
+      this.analyzeFlightDensity();
     }
   }
 }
@@ -1695,6 +1906,49 @@ export default {
 .features-section li, .application-section li {
   margin: 0.5rem 0;
   padding-left: 1rem;
+}
+
+/* 主Tab样式 */
+.main-tab-container {
+  margin-bottom: 2rem;
+}
+
+.main-tab-buttons {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+}
+
+.main-tab-btn {
+  padding: 1rem 2.5rem;
+  background: rgba(30, 40, 70, 0.6);
+  color: #a0b3c6;
+  border: 2px solid rgba(64, 224, 255, 0.3);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 1.1rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.main-tab-btn:hover {
+  background: rgba(40, 50, 80, 0.8);
+  border-color: rgba(64, 224, 255, 0.5);
+  transform: translateY(-2px);
+}
+
+.main-tab-btn.active {
+  background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
+  color: white;
+  border-color: transparent;
+  box-shadow: 0 4px 12px rgba(79, 172, 254, 0.4);
+}
+
+.main-tab-icon {
+  font-size: 1.3rem;
 }
 
 /* Tab 样式 */
@@ -2517,6 +2771,15 @@ export default {
     flex-direction: column;
   }
 
+  .main-tab-buttons {
+    flex-direction: column;
+  }
+
+  .main-tab-btn {
+    padding: 0.8rem 1.5rem;
+    font-size: 1rem;
+  }
+
   .multi-controls {
     flex-direction: column;
   }
@@ -2907,6 +3170,328 @@ export default {
   .path-alternatives-sidebar {
     width: 100%;
     right: 0;
+  }
+}
+
+/* 时间段与权重信息样式 */
+.period-weight-section {
+  margin-bottom: 1.5rem;
+  padding: 1.5rem;
+  background: rgba(20, 30, 60, 0.6);
+  border: 1px solid rgba(64, 224, 255, 0.3);
+  border-radius: 8px;
+}
+
+.period-weight-section h4 {
+  color: #4facfe;
+  margin: 0 0 1rem 0;
+  font-size: 1.2rem;
+}
+
+.period-weight-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.period-analysis {
+  background: rgba(30, 40, 70, 0.4);
+  border-radius: 8px;
+  padding: 1rem;
+  border: 1px solid rgba(79, 172, 254, 0.2);
+}
+
+.period-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.period-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid rgba(64, 224, 255, 0.1);
+}
+
+.period-item:last-child {
+  border-bottom: none;
+}
+
+.period-label {
+  color: #a0b3c6;
+  font-size: 0.9rem;
+}
+
+.period-value {
+  color: #ffffff;
+  font-weight: 500;
+  font-size: 0.9rem;
+}
+
+.weight-config {
+  background: rgba(30, 40, 70, 0.4);
+  border-radius: 8px;
+  padding: 1rem;
+  border: 1px solid rgba(79, 172, 254, 0.2);
+}
+
+.weight-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.weight-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #4facfe;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.weight-mode {
+  color: #a0b3c6;
+  font-size: 0.85rem;
+  font-weight: 400;
+}
+
+.weight-controls {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.weight-btn {
+  padding: 0.4rem 0.8rem;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.weight-btn.auto {
+  background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
+  color: white;
+}
+
+.weight-btn.auto:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(79, 172, 254, 0.4);
+}
+
+.weight-btn.auto:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.weight-btn.manual {
+  background: rgba(100, 116, 139, 0.8);
+  color: #ffffff;
+}
+
+.weight-btn.manual:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(100, 116, 139, 0.4);
+}
+
+.weight-btn.manual:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.weight-values {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  margin-bottom: 1rem;
+}
+
+.weight-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.8rem;
+  background: rgba(15, 23, 42, 0.6);
+  border-radius: 6px;
+  border: 1px solid rgba(64, 224, 255, 0.2);
+}
+
+.weight-label {
+  color: #a0b3c6;
+  font-size: 0.9rem;
+  min-width: 80px;
+}
+
+.weight-value {
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 1.1rem;
+  min-width: 40px;
+  text-align: center;
+}
+
+.weight-desc {
+  color: #4facfe;
+  font-size: 0.85rem;
+  margin-left: auto;
+}
+
+.weight-description {
+  padding: 0.8rem;
+  background: rgba(15, 23, 42, 0.4);
+  border-radius: 6px;
+  border: 1px solid rgba(64, 224, 255, 0.1);
+}
+
+.weight-description p {
+  color: #a0b3c6;
+  font-size: 0.9rem;
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* 当前时段状态指示器 */
+.period-status-indicator {
+  margin: 1rem 0;
+  animation: fadeIn 0.5s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.period-status-content {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.5rem;
+  border-radius: 12px;
+  border: 2px solid;
+  transition: all 0.3s ease;
+}
+
+.period-status-content.peak {
+  background: linear-gradient(135deg, rgba(248, 113, 113, 0.15) 0%, rgba(239, 68, 68, 0.1) 100%);
+  border-color: rgba(248, 113, 113, 0.5);
+  box-shadow: 0 4px 15px rgba(248, 113, 113, 0.2);
+}
+
+.period-status-content.off-peak {
+  background: linear-gradient(135deg, rgba(74, 222, 128, 0.15) 0%, rgba(34, 197, 94, 0.1) 100%);
+  border-color: rgba(74, 222, 128, 0.5);
+  box-shadow: 0 4px 15px rgba(74, 222, 128, 0.2);
+}
+
+.period-status-content.normal {
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.15) 0%, rgba(245, 158, 11, 0.1) 100%);
+  border-color: rgba(251, 191, 36, 0.5);
+  box-shadow: 0 4px 15px rgba(251, 191, 36, 0.2);
+}
+
+.period-status-icon {
+  font-size: 2rem;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+}
+
+.period-status-text {
+  flex: 1;
+}
+
+.period-status-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-bottom: 0.3rem;
+}
+
+.period-status-content.peak .period-status-title {
+  color: #f87171;
+}
+
+.period-status-content.off-peak .period-status-title {
+  color: #4ade80;
+}
+
+.period-status-content.normal .period-status-title {
+  color: #fbbf24;
+}
+
+.period-status-desc {
+  font-size: 0.9rem;
+  color: #a0b3c6;
+  margin-bottom: 0.5rem;
+}
+
+.period-weights-detail {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  font-size: 0.85rem;
+  color: #cbd5e1;
+}
+
+.period-weights-detail strong {
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.weight-separator {
+  color: #64748b;
+}
+
+.period-indicator {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-left: 0.5rem;
+}
+
+.period-indicator.peak {
+  background: rgba(248, 113, 113, 0.2);
+  color: #f87171;
+  border: 1px solid rgba(248, 113, 113, 0.5);
+}
+
+.period-indicator.off-peak {
+  background: rgba(74, 222, 128, 0.2);
+  color: #4ade80;
+  border: 1px solid rgba(74, 222, 128, 0.5);
+}
+
+.period-indicator.normal {
+  background: rgba(251, 191, 36, 0.2);
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.5);
+}
+
+@media (max-width: 768px) {
+  .period-weight-content {
+    flex-direction: column;
+  }
+
+  .period-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.3rem;
+  }
+
+  .weight-header {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }
 </style>

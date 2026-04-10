@@ -500,7 +500,7 @@ class AStarOptimizer:
         self.weight_fuel = weight_fuel
         self.aircraft_speed = aircraft_speed
 
-    def heuristic(self, node: Node, goal: Node) -> float:
+    def heuristic(self, node: Node, goal: Node, weights: Dict[str, float] = None) -> float:
         """
         启发式函数（h函数）：估算从当前节点到目标节点的代价
 
@@ -509,6 +509,7 @@ class AStarOptimizer:
         参数:
             node: 当前节点
             goal: 目标节点
+            weights: 可选的权重字典，如果为None则使用实例权重
 
         返回:
             估算代价
@@ -517,9 +518,10 @@ class AStarOptimizer:
         distance = math.sqrt((node.x - goal.x)**2 + (node.y - goal.y)**2)
 
         # 转换为综合代价
-        return self._calculate_cost(distance, distance / self.aircraft_speed)
+        return self._calculate_cost(distance, distance / self.aircraft_speed, weights)
 
-    def _calculate_cost(self, distance: float, time: float) -> float:
+    def _calculate_cost(self, distance: float, time: float,
+                       weights: Dict[str, float] = None) -> float:
         """
         计算边的代价（多目标优化）
 
@@ -531,6 +533,7 @@ class AStarOptimizer:
         参数:
             distance: 距离（米）
             time: 时间（秒）
+            weights: 可选的权重字典，如果为None则使用实例权重
 
         返回:
             综合代价
@@ -539,20 +542,33 @@ class AStarOptimizer:
         # 简化模型：燃料消耗与距离和时间成正比
         fuel_consumption = distance * 0.1 + time * 0.05
 
+        # 使用传入的权重或实例权重
+        if weights is not None:
+            w_distance = weights.get('distance', self.weight_distance)
+            w_time = weights.get('time', self.weight_time)
+            w_fuel = weights.get('fuel', self.weight_fuel)
+        else:
+            w_distance = self.weight_distance
+            w_time = self.weight_time
+            w_fuel = self.weight_fuel
+
         # 加权综合代价
-        total_cost = (self.weight_distance * distance +
-                     self.weight_time * time +
-                     self.weight_fuel * fuel_consumption)
+        total_cost = (w_distance * distance +
+                     w_time * time +
+                     w_fuel * fuel_consumption)
 
         return total_cost
 
-    def find_path(self, start: Node, goal: Node) -> Tuple[Optional[List[Node]], Dict]:
+    def find_path(self, start: Node, goal: Node,
+                  weights: Dict[str, float] = None) -> Tuple[Optional[List[Node]], Dict]:
         """
         使用A*算法查找最优路径
 
         参数:
             start: 起始节点
             goal: 目标节点
+            weights: 可选的权重字典，格式: {'distance': float, 'time': float, 'fuel': float}
+                   如果提供，将临时覆盖当前的权重设置
 
         返回:
             (路径, 统计信息字典)
@@ -564,7 +580,7 @@ class AStarOptimizer:
 
         # 创建起始节点
         start_path_node = PathNode(
-            f_score=self.heuristic(start, goal),
+            f_score=self.heuristic(start, goal, weights),
             g_score=0.0,
             node=start,
             parent=None
@@ -586,7 +602,7 @@ class AStarOptimizer:
             if current.node.id == goal.id:
                 # 重建路径
                 path = self._reconstruct_path(current)
-                stats = self._calculate_path_stats(path)
+                stats = self._calculate_path_stats(path, weights)
 
                 print(f"\n✓ 找到最优路径！")
                 print(f"  - 迭代次数: {iterations}")
@@ -612,14 +628,14 @@ class AStarOptimizer:
                 # 计算从起点到邻居的实际代价
                 travel_time = edge.length / min(edge.speed_limit, self.aircraft_speed)
                 tentative_g_score = current.g_score + self._calculate_cost(
-                    edge.length, travel_time
+                    edge.length, travel_time, weights
                 )
 
                 # 检查是否需要更新邻居节点
                 if neighbor.id not in path_nodes or tentative_g_score < path_nodes[neighbor.id].g_score:
                     # 创建新的路径节点
                     neighbor_path_node = PathNode(
-                        f_score=tentative_g_score + self.heuristic(neighbor, goal),
+                        f_score=tentative_g_score + self.heuristic(neighbor, goal, weights),
                         g_score=tentative_g_score,
                         node=neighbor,
                         parent=current
@@ -647,8 +663,16 @@ class AStarOptimizer:
         path.reverse()
         return path
 
-    def _calculate_path_stats(self, path: List[Node]) -> Dict:
-        """计算路径统计信息"""
+    def _calculate_path_stats(self, path: List[Node], weights: Dict[str, float] = None) -> Dict:
+        """计算路径统计信息
+
+        参数:
+            path: 路径节点列表
+            weights: 可选的权重字典
+
+        返回:
+            统计信息字典
+        """
         total_distance = 0.0
         total_time = 0.0
         fuel_consumption = 0.0
@@ -669,7 +693,7 @@ class AStarOptimizer:
             # 计算燃料消耗
             fuel_consumption += distance * 0.1 + time * 0.05
 
-        total_cost = self._calculate_cost(total_distance, total_time)
+        total_cost = self._calculate_cost(total_distance, total_time, weights)
 
         return {
             'total_distance': total_distance,
@@ -763,6 +787,42 @@ class AStarOptimizer:
 
         return paths
 
+    def update_weights(self, distance_weight: float = None, time_weight: float = None,
+                      fuel_weight: float = None) -> None:
+        """
+        更新A*算法的权重参数
+
+        参数:
+            distance_weight: 新的距离权重（如果为None则保持不变）
+            time_weight: 新的时间权重（如果为None则保持不变）
+            fuel_weight: 新的燃料权重（如果为None则保持不变）
+        """
+        if distance_weight is not None:
+            self.weight_distance = distance_weight
+        if time_weight is not None:
+            self.weight_time = time_weight
+        if fuel_weight is not None:
+            self.weight_fuel = fuel_weight
+
+    def set_weights_for_period(self, period_type: str) -> None:
+        """
+        根据时间段类型设置权重
+
+        参数:
+            period_type: 时间段类型 ('peak', 'off_peak', 'normal')
+        """
+        weight_configs = {
+            'peak': {'distance': 1.0, 'time': 1.5, 'fuel': 0.3},
+            'off_peak': {'distance': 1.0, 'time': 0.7, 'fuel': 0.8},
+            'normal': {'distance': 1.0, 'time': 1.0, 'fuel': 0.5}
+        }
+
+        config = weight_configs.get(period_type, weight_configs['normal'])
+        self.update_weights(
+            distance_weight=config['distance'],
+            time_weight=config['time'],
+            fuel_weight=config['fuel']
+        )
 
 
 def demo_astar_optimization():

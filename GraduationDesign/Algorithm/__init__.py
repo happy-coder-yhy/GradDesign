@@ -12,6 +12,7 @@ from .MultiAircraftScheduler import (
     generate_simulation_data,
     ConflictDetector
 )
+from .DensityAnalyzer import DensityAnalyzer
 
 __all__ = [
     'AirportGraph',
@@ -21,5 +22,6 @@ __all__ = [
     'OperationType',
     'PriorityLevel',
     'generate_simulation_data',
-    'ConflictDetector'
+    'ConflictDetector',
+    'DensityAnalyzer'
 ]

@@ -23,6 +23,7 @@ from enum import Enum
 import copy
 
 from .Astar import AirportGraph, Node, AStarOptimizer
+from .DensityAnalyzer import DensityAnalyzer
 
 
 class OperationType(Enum):
@@ -95,6 +96,7 @@ class AircraftSchedule:
     total_distance: float = 0.0
     total_time: float = 0.0
     delay: timedelta = timedelta(0)
+    weights: Dict[str, float] = field(default_factory=dict)  # 动态权重配置
 
 
 class ConflictDetector:
@@ -225,18 +227,25 @@ class MultiAircraftScheduler:
     3. Time-window - 时间窗调度
     """
 
-    def __init__(self, graph: AirportGraph, strategy: str = 'fcfs'):
+    def __init__(self, graph: AirportGraph, strategy: str = 'fcfs',
+                 time_window_minutes: int = 30, peak_threshold: float = 0.6):
         """
         初始化调度器
 
         参数:
             graph: 机场路网图
             strategy: 调度策略 ('fcfs', 'priority', 'time_window')
+            time_window_minutes: 时间窗口大小（分钟），用于密度分析
+            peak_threshold: 高峰期阈值（密度百分比）
         """
         self.graph = graph
         self.strategy = strategy
         self.optimizer = AStarOptimizer(graph)
         self.conflict_detector = ConflictDetector(safety_margin=30)
+        self.density_analyzer = DensityAnalyzer(
+            time_window_minutes=time_window_minutes,
+            peak_threshold=peak_threshold
+        )
 
     def schedule_multiple_flights(self, flights: List[Flight],
                                   max_iterations: int = 10) -> Dict[str, AircraftSchedule]:
@@ -257,6 +266,9 @@ class MultiAircraftScheduler:
 
         # 1. 对航班排序
         sorted_flights = self._sort_flights(flights)
+
+        # 存储所有航班用于密度分析
+        self.all_flights = flights
 
         # 2. 依次为每个航班规划路径
         schedules = {}
@@ -395,8 +407,16 @@ class MultiAircraftScheduler:
         返回:
             调度方案
         """
-        # 使用A*算法找路径
-        path, stats = self.optimizer.find_path(flight.start_node, flight.end_node)
+        # 根据航班计划时间获取动态权重
+        period_type = self.density_analyzer.get_period_for_time(
+            self.all_flights, flight.scheduled_time
+        )
+        weights = self.density_analyzer.get_weights_for_period(period_type)
+
+        # 使用A*算法找路径，传入动态权重
+        path, stats = self.optimizer.find_path(
+            flight.start_node, flight.end_node, weights=weights
+        )
 
         if not path:
             return None
@@ -423,7 +443,8 @@ class MultiAircraftScheduler:
             end_time=current_time,
             waypoints=waypoints,
             total_distance=stats.get('total_distance', 0),
-            total_time=stats.get('total_time', 0)
+            total_time=stats.get('total_time', 0),
+            weights=weights
         )
 
         return schedule
