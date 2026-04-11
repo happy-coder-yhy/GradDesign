@@ -108,60 +108,43 @@ class DensityAnalyzer:
         densities = [count / (self.time_window_minutes / 60) for count in window_counts]
 
         # 6. 识别高峰期和低峰期
-        # 采用四分位距法(IQR)结合标准差法，参考交通工程领域标准
+        # 基于机场运营标准的绝对判断方法
+        # 
+        # 参考依据：
+        # - ICAO Doc 9974: 机场容量评估标准
+        # - 中国民航局《机场航班时刻容量评估办法》
+        # - 西安咸阳国际机场为大型枢纽机场，设计容量约60-70架次/小时
+        #
+        # 高峰/低峰判断标准（基于机场容量百分比）：
+        # - 高峰时段: > 40 航班/小时 (约60-70%容量)
+        # - 正常时段: 15-40 航班/小时
+        # - 低峰时段: < 15 航班/小时
+        
+        AIRPORT_CAPACITY = 60  # 西安机场设计容量（航班/小时）
+        PEAK_THRESHOLD = 40    # 高峰阈值：40 航班/小时
+        OFF_PEAK_THRESHOLD = 15  # 低峰阈值：15 航班/小时
+        
         if len(densities) > 0:
-            avg_density = statistics.mean(densities)
-
             peak_windows = []
             off_peak_windows = []
             normal_windows = []
 
-            # 计算统计量用于更科学的高峰判断
-            if len(densities) >= 4:
-                # 四分位距法 (IQR Method)
-                sorted_densities = sorted(densities)
-                q1 = statistics.quantiles(sorted_densities, n=4)[0]  # 第25百分位数
-                q3 = statistics.quantiles(sorted_densities, n=4)[2]  # 第75百分位数
-                iqr = q3 - q1
-
-                # 标准差法
-                std_density = statistics.stdev(densities) if len(densities) > 1 else 0
-
-                # 综合阈值计算
-                # 高峰期阈值：取 Q3 + 1.5*IQR 和 均值 + 0.5*标准差 的较小值
-                # 这种方法参考了箱线图异常值检测和交通流量分析的标准做法
-                peak_threshold_value = min(
-                    q3 + 1.5 * iqr,
-                    avg_density + 0.5 * std_density if std_density > 0 else avg_density * 1.3
-                )
-
-                # 低峰期阈值：取 Q1 - 1.5*IQR 和 均值 - 0.5*标准差 的较大值
-                off_peak_threshold_value = max(
-                    q1 - 1.5 * iqr if q1 > 1.5 * iqr else 0,
-                    avg_density - 0.5 * std_density if std_density > 0 else avg_density * 0.7
-                )
-
-                # 确保阈值合理性
-                peak_threshold_value = max(peak_threshold_value, avg_density * 1.2)
-                off_peak_threshold_value = min(off_peak_threshold_value, avg_density * 0.8)
-            else:
-                # 数据点较少时，使用基于平均值的相对阈值
-                peak_threshold_value = avg_density * (1 + self.peak_threshold)
-                off_peak_threshold_value = avg_density * (1 - self.peak_threshold)
-
             for i, density in enumerate(densities):
-                # 使用综合阈值方法判断
-                if density >= peak_threshold_value:
+                # 使用绝对阈值判断，而非相对平均值
+                if density >= PEAK_THRESHOLD:
                     peak_windows.append(time_windows[i])
-                elif density <= off_peak_threshold_value:
+                elif density <= OFF_PEAK_THRESHOLD:
                     off_peak_windows.append(time_windows[i])
                 else:
                     normal_windows.append(time_windows[i])
+
         else:
-            avg_density = 0
             peak_windows = []
             off_peak_windows = []
             normal_windows = []
+            
+        # 计算平均密度用于显示
+        avg_density = statistics.mean(densities) if densities else 0
 
         return {
             'time_windows': time_windows,
@@ -209,8 +192,13 @@ class DensityAnalyzer:
                     return 'normal'
 
         # 如果查询时间不在任何窗口内，根据机场运营规律推断
-        # 参考机场运营数据：繁忙时段通常为 7:00-10:00 和 17:00-21:00
+        # 参考机场运营数据和中国民航航班时刻分布
         avg_density = analysis['average_density']
+        
+        # 绝对判断标准
+        PEAK_THRESHOLD = 40    # 高峰阈值：40 航班/小时
+        OFF_PEAK_THRESHOLD = 15  # 低峰阈值：15 航班/小时
+        
         if avg_density > 0:
             hour = query_time.hour
             weekday = query_time.weekday()  # 0=周一, 6=周日
@@ -218,28 +206,26 @@ class DensityAnalyzer:
             # 判断是否为工作日
             is_weekday = weekday < 5
 
+            # 首先根据实际密度判断
+            if avg_density >= PEAK_THRESHOLD:
+                return 'peak'
+            elif avg_density <= OFF_PEAK_THRESHOLD:
+                return 'off_peak'
+            
+            # 如果密度处于临界值，再根据时间段推断
             if is_weekday:
-                # 工作日高峰判断
-                # 早高峰：7:00-10:00（出港高峰）
-                # 晚高峰：17:00-21:00（进港高峰）
+                # 工作日典型高峰时段
                 if (7 <= hour <= 10) or (17 <= hour <= 21):
-                    return 'peak'
-                # 次高峰：11:00-12:00, 14:00-16:00
-                elif (11 <= hour <= 12) or (14 <= hour <= 16):
-                    return 'normal'
-                # 低峰：0:00-6:00, 13:00, 22:00-23:00
-                elif (0 <= hour <= 6) or hour == 13 or (22 <= hour <= 23):
+                    return 'peak' if avg_density >= 35 else 'normal'
+                elif (0 <= hour <= 5):
                     return 'off_peak'
                 else:
                     return 'normal'
             else:
-                # 周末高峰判断（相对分散）
-                # 周末上午高峰推迟：9:00-12:00
-                # 周末下午/晚上高峰：15:00-20:00
+                # 周末时段
                 if (9 <= hour <= 12) or (15 <= hour <= 20):
-                    return 'peak'
-                # 周末低峰：0:00-8:00, 21:00-23:00
-                elif (0 <= hour <= 8) or (21 <= hour <= 23):
+                    return 'peak' if avg_density >= 35 else 'normal'
+                elif (0 <= hour <= 7):
                     return 'off_peak'
                 else:
                     return 'normal'

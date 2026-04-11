@@ -97,20 +97,22 @@
                   <!-- 随机生成模式 -->
                   <div v-show="dataSource === 'random'" class="source-content">
                     <div class="multi-controls">
-                      <div class="control-group">
-                        <label>航班数量:</label>
-                        <input
-                          type="number"
-                          v-model.number="flightCount"
-                          :disabled="isScheduling"
-                          min="10"
-                          max="100"
-                          placeholder="10-100"
-                          class="flight-count-input"
-                          @input="validateFlightCount"
-                        />
-                        <span class="unit">架</span>
-                        <div v-if="flightCountError" class="error-text">{{ flightCountError }}</div>
+                      <div class="control-group flight-input-group">
+                        <div class="input-row">
+                          <label>航班数量:</label>
+                          <input
+                            type="number"
+                            v-model.number="flightCount"
+                            :disabled="isScheduling"
+                            min="10"
+                            max="100"
+                            placeholder="10-100"
+                            class="flight-count-input"
+                            @input="validateFlightCount"
+                          />
+                          <span class="unit">架</span>
+                        </div>
+                        <div v-if="flightCountError" class="error-row">{{ flightCountError }}</div>
                       </div>
 
                       <div class="control-group">
@@ -344,16 +346,49 @@
 
                 <!-- 可视化画布 -->
                 <div v-if="schedules.length || multiNodesLoaded" class="multi-visualization">
-                  <canvas
-                    ref="multiCanvas"
-                    width="1200"
-                    height="600"
-                    @wheel="handleMultiWheel"
-                    @mousedown="handleMultiMouseDown"
-                    @mousemove="handleMultiMouseMove"
-                    @mouseup="handleMultiMouseUp"
-                    @mouseleave="handleMultiMouseUp"
-                    class="multi-canvas"></canvas>
+                  <div style="position: relative;">
+                    <canvas
+                      ref="multiCanvas"
+                      width="1200"
+                      height="600"
+                      @wheel="handleMultiWheel"
+                      @mousedown="handleMultiMouseDown"
+                      @mousemove="handleMultiMouseMove"
+                      @mouseup="handleMultiMouseUp"
+                      @mouseleave="handleMultiMouseUp"
+                      class="multi-canvas"
+                    ></canvas>
+                    
+                    <!-- 冲突点悬浮提示 -->
+                    <div
+                      v-if="conflictTooltip.show"
+                      class="conflict-tooltip"
+                      :style="{ 
+                        left: (conflictTooltip.x - 350) + 'px', 
+                        top: (conflictTooltip.y - 100) + 'px' 
+                      }"
+                    >
+                      <div class="tooltip-title">⚠️ 冲突信息</div>
+                      <div class="tooltip-content">
+                        <div class="tooltip-row">
+                          <span class="tooltip-label">航班1:</span>
+                          <span class="tooltip-value">{{ conflictTooltip.conflict.flight_ids[0] }}</span>
+                        </div>
+                        <div class="tooltip-row">
+                          <span class="tooltip-label">航班2:</span>
+                          <span class="tooltip-value">{{ conflictTooltip.conflict.flight_ids[1] }}</span>
+                        </div>
+                        <div class="tooltip-row">
+                          <span class="tooltip-label">冲突节点:</span>
+                          <span class="tooltip-value">{{ conflictTooltip.conflict.node_id }}</span>
+                        </div>
+                        <div class="tooltip-row">
+                          <span class="tooltip-label">冲突时间:</span>
+                          <span class="tooltip-value">{{ formatTime(conflictTooltip.conflict.time) }}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
 
                   <div class="canvas-controls">
                     <button @click="multiZoomIn" class="zoom-btn">放大 +</button>
@@ -696,6 +731,14 @@ export default {
       multiPanOffset: { x: 0, y: 0 },
       multiIsDragging: false,
       multiDragStart: { x: 0, y: 0 },
+      
+      // 冲突点悬浮提示
+      conflictTooltip: {
+        show: false,
+        x: 0,
+        y: 0,
+        conflict: null
+      },
       multiBaseScale: 1.0,
       multiBaseOffsetX: 0,
       multiBaseOffsetY: 0,
@@ -717,22 +760,34 @@ export default {
   },
   computed: {
     allConflicts() {
-      const conflicts = [];
-      const seenKeys = new Set();
+      // 使用 Map 彻底去重，key 为 "航班对+节点+时间"
+      const conflictMap = new Map();
       
       this.schedules.forEach(schedule => {
         schedule.conflicts.forEach(conflict => {
-          // 使用多个字段组合作为唯一键：节点ID + 时间 + 航班ID排序后拼接
-          const flightIdsKey = [...conflict.flight_ids].sort().join(',');
-          const uniqueKey = `${conflict.node_id}_${conflict.time}_${flightIdsKey}`;
+          // 确保航班ID排序
+          const sortedFlightIds = [...conflict.flight_ids].sort();
+          // 提取时间的关键部分（忽略秒）
+          let timeKey = conflict.time;
+          if (typeof conflict.time === 'string' && conflict.time.includes(':')) {
+            const parts = conflict.time.split(':');
+            timeKey = `${parts[0]}:${parts[1]}`;
+          }
+          // 唯一键
+          const uniqueKey = `${sortedFlightIds.join(',')}_${conflict.node_id}_${timeKey}`;
           
-          if (!seenKeys.has(uniqueKey)) {
-            seenKeys.add(uniqueKey);
-            conflicts.push(conflict);
+          if (!conflictMap.has(uniqueKey)) {
+            // 创建新对象，不修改原始数据
+            const normalizedConflict = {
+              ...conflict,
+              flight_ids: sortedFlightIds
+            };
+            conflictMap.set(uniqueKey, normalizedConflict);
           }
         });
       });
-      return conflicts;
+      
+      return Array.from(conflictMap.values());
     }
   },
   methods: {
@@ -1460,20 +1515,90 @@ export default {
     },
 
     handleMultiMouseMove(event) {
-      if (!this.multiIsDragging) return;
+      // 如果正在拖拽，处理拖拽逻辑
+      if (this.multiIsDragging) {
+        const dx = event.clientX - this.multiDragStart.x;
+        const dy = event.clientY - this.multiDragStart.y;
 
-      const dx = event.clientX - this.multiDragStart.x;
-      const dy = event.clientY - this.multiDragStart.y;
+        this.multiPanOffset.x += dx;
+        this.multiPanOffset.y += dy;
 
-      this.multiPanOffset.x += dx;
-      this.multiPanOffset.y += dy;
+        this.multiDragStart = {
+          x: event.clientX,
+          y: event.clientY
+        };
 
-      this.multiDragStart = {
-        x: event.clientX,
-        y: event.clientY
-      };
-
-      this.drawMultiAircraftPaths();
+        this.drawMultiAircraftPaths();
+        return;
+      }
+      
+      // 检测鼠标是否悬浮在冲突点上
+      this.checkConflictHover(event);
+    },
+    
+    checkConflictHover(event) {
+      // 直接通过 $refs 获取 canvas，确保能获取到
+      const canvas = this.$refs.multiCanvas;
+      if (!canvas || !this.schedules.length) {
+        this.conflictTooltip.show = false;
+        return;
+      }
+      
+      // 保存 canvas 引用
+      this.multiCanvas = canvas;
+      const rect = canvas.getBoundingClientRect();
+      const mouseX = event.clientX - rect.left;
+      const mouseY = event.clientY - rect.top;
+      
+      // 获取需要绘制的冲突
+      let conflictsToDraw;
+      if (this.selectedFlightIds.length === 0) {
+        conflictsToDraw = this.allConflicts;
+      } else {
+        conflictsToDraw = this.allConflicts.filter(conflict =>
+          conflict.flight_ids.some(id => this.selectedFlightIds.includes(id))
+        );
+      }
+      
+      // 检查鼠标是否在某个冲突点上
+      let hoveredConflict = null;
+      
+      for (const conflict of conflictsToDraw) {
+        const schedule = this.schedules.find(s =>
+          s.path.some(p => p.id === conflict.node_id)
+        );
+        
+        if (schedule) {
+          const point = schedule.path.find(p => p.id === conflict.node_id);
+          if (point) {
+            const pos = this.multiTransform(point.x, point.y);
+            const baseSize = conflict.severity === 'high' ? 12 : 10;
+            const conflictSize = Math.max(6, Math.min(20, baseSize * Math.sqrt(this.multiZoomLevel)));
+            
+            // 计算鼠标与冲突点的距离
+            const distance = Math.sqrt(
+              Math.pow(mouseX - pos.x, 2) + Math.pow(mouseY - pos.y, 2)
+            );
+            
+            // 如果距离小于冲突点大小，认为是悬浮
+            if (distance <= conflictSize * 2.5) {
+              hoveredConflict = conflict;
+              break;
+            }
+          }
+        }
+      }
+      
+      if (hoveredConflict) {
+        this.conflictTooltip = {
+          show: true,
+          x: event.clientX + 15,
+          y: event.clientY - 10,
+          conflict: hoveredConflict
+        };
+      } else {
+        this.conflictTooltip.show = false;
+      }
     },
 
     handleMultiMouseUp() {
@@ -1482,7 +1607,7 @@ export default {
         this.multiCanvas.style.cursor = 'grab';
       }
     },
-
+    
     multiZoomIn() {
       this.multiZoomLevel = Math.min(15, this.multiZoomLevel + 0.2);
       this.drawMultiAircraftPaths();
@@ -1606,7 +1731,35 @@ export default {
         });
 
         if (response.data.success) {
-          this.pathAlternatives = response.data.paths;
+          // 获取当前航班的冲突节点
+          const schedule = this.getScheduleResult(flight.flight_id);
+          const conflictNodeIds = new Set();
+          if (schedule && schedule.conflicts) {
+            schedule.conflicts.forEach(c => conflictNodeIds.add(c.node_id));
+          }
+          
+          // 过滤备选路径：只保留能避开所有冲突节点的路径
+          let filteredPaths = response.data.paths.filter(path => {
+            const pathNodeIds = path.nodes.map(n => n.id);
+            // 检查路径是否避开了所有冲突节点
+            for (const conflictNodeId of conflictNodeIds) {
+              if (pathNodeIds.includes(conflictNodeId)) {
+                return false; // 路径仍经过冲突节点，过滤掉
+              }
+            }
+            return true; // 路径避开了所有冲突节点，保留
+          });
+          
+          // 如果没有可用的备选路径，显示提示
+          if (filteredPaths.length === 0 && conflictNodeIds.size > 0) {
+            ElMessage.warning({
+              message: '未找到能完全避开冲突节点的备选路径，建议调整航班起飞时间',
+              duration: 5000,
+              showClose: true
+            });
+          }
+          
+          this.pathAlternatives = filteredPaths;
           // 将当前路径添加到列表中作为第一条
           this.pathAlternatives.unshift({
             path_id: 'path_original',
@@ -1764,15 +1917,23 @@ export default {
 
         const schedule = this.schedules[scheduleIndex];
         
-        // 检查新路径与原路径是否有足够差异（至少30%的节点不同）
-        const originalNodes = schedule.path.map(n => n.id);
-        const newNodes = altPath.nodes.map(n => n.id);
-        const commonNodes = newNodes.filter(id => originalNodes.includes(id));
-        const similarity = commonNodes.length / Math.max(originalNodes.length, newNodes.length);
+        // 获取当前航班的所有冲突节点
+        const conflictNodeIds = new Set();
+        schedule.conflicts.forEach(c => conflictNodeIds.add(c.node_id));
         
-        if (similarity > 0.7) {
+        // 检查新路径是否避开了所有冲突节点
+        const newPathNodeIds = altPath.nodes.map(n => n.id);
+        const stillHasConflicts = [];
+        
+        conflictNodeIds.forEach(nodeId => {
+          if (newPathNodeIds.includes(nodeId)) {
+            stillHasConflicts.push(nodeId);
+          }
+        });
+        
+        if (stillHasConflicts.length > 0) {
           ElMessage.warning({
-            message: '该备选路径与原路径过于相似，无法有效消除冲突。请选择差异更大的路径（绕行更远的路径）。',
+            message: `该备选路径仍经过冲突节点（节点ID: ${stillHasConflicts.join(', ')}），无法消除冲突。请选择完全避开冲突节点的路径。`,
             duration: 5000,
             showClose: true
           });
@@ -1784,9 +1945,27 @@ export default {
         schedule.total_distance = altPath.distance;
         schedule.total_time = altPath.time;
         
-        // 标记冲突已消解（清空冲突列表）
+        // 获取被解决的冲突节点
+        const resolvedConflictNodes = new Set(schedule.conflicts.map(c => c.node_id));
+        
+        // 标记冲突已消解（清空当前航班的冲突列表）
         schedule.conflicts = [];
         schedule.conflict_count = 0;
+        
+        // 更新其他航班的冲突列表 - 移除涉及已解决冲突的条目
+        this.schedules.forEach(otherSchedule => {
+          if (otherSchedule.flight_id !== this.selectedFlight.flight_id) {
+            
+            otherSchedule.conflicts = otherSchedule.conflicts.filter(c => {
+              // 如果冲突涉及当前航班且冲突节点已被解决，则移除
+              const involvesCurrentFlight = c.flight_ids.includes(this.selectedFlight.flight_id);
+              const isResolvedNode = resolvedConflictNodes.has(c.node_id);
+              // 保留：不涉及当前航班 或 涉及但不是已解决的节点
+              return !(involvesCurrentFlight && isResolvedNode);
+            });
+            otherSchedule.conflict_count = otherSchedule.conflicts.length;
+          }
+        });
 
         // 更新选中航班的路径
         this.selectedFlight.path = altPath.nodes;
@@ -2269,7 +2448,7 @@ export default {
   background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
 }
 
-.error-message {
+.error-message-old {
   margin-top: 1rem;
   padding: 0.8rem 1rem;
   background: rgba(248, 113, 113, 0.1);
@@ -2284,7 +2463,7 @@ export default {
 .multi-controls {
   display: flex;
   gap: 1rem;
-  align-items: center;
+  align-items: flex-start;
   flex-wrap: wrap;
   padding: 1rem;
   background: rgba(20, 30, 60, 0.6);
@@ -2296,6 +2475,66 @@ export default {
   display: flex;
   gap: 0.5rem;
   align-items: center;
+  flex-wrap: wrap;
+}
+
+.control-group.has-error {
+  align-items: flex-start;
+}
+
+/* 航班输入组 - 块级布局 */
+.flight-input-wrapper-old {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.flight-input-wrapper-old .input-label {
+  color: #a0b3c6;
+  font-weight: 500;
+  line-height: 36px;
+  white-space: nowrap;
+}
+
+.input-with-error-old {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.input-line-old {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: 36px;
+}
+
+.error-message-old {
+  color: #f87171;
+  font-size: 0.8rem;
+  animation: fadeIn 0.3s ease;
+}
+
+.control-group.flight-input-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+}
+
+.control-group.flight-input-group .input-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: 36px;
+}
+
+.control-group.flight-input-group .error-row {
+  color: #f87171;
+  font-size: 0.8rem;
+  margin-top: 0.4rem;
+  margin-left: 5.5rem;
+  animation: fadeIn 0.3s ease;
 }
 
 .control-group label {
@@ -2319,7 +2558,7 @@ export default {
 
 /* 航班数量输入框样式 */
 .control-group input.flight-count-input {
-  width: 80px;
+  width: 180px;
   padding: 0.5rem 0.8rem;
   background: rgba(15, 23, 42, 0.8);
   border: 1px solid rgba(64, 224, 255, 0.3);
@@ -2349,13 +2588,7 @@ export default {
 }
 
 /* 错误提示样式 */
-.control-group .error-text {
-  color: #f87171;
-  font-size: 0.8rem;
-  margin-top: 0.3rem;
-  margin-left: 0.2rem;
-  animation: fadeIn 0.3s ease;
-}
+
 
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(-5px); }
@@ -3259,12 +3492,14 @@ export default {
 }
 
 .cancel-preview-btn {
-  padding: 0.4rem 0.8rem;
+  flex: 1;
+  padding: 0.4rem 0.6rem;
   border: 1px solid rgba(248, 113, 113, 0.5);
-  border-radius: 4px;
+  border-radius: 6px;
   background: rgba(248, 113, 113, 0.1);
   color: #f87171;
-  font-size: 0.85rem;
+  font-size: 0.75rem;
+  font-weight: 500;
   cursor: pointer;
   transition: all 0.3s ease;
 }
@@ -3272,6 +3507,73 @@ export default {
 .cancel-preview-btn:hover {
   background: rgba(248, 113, 113, 0.2);
   border-color: rgba(248, 113, 113, 0.8);
+  transform: translateY(-1px);
+}
+
+/* 冲突点悬浮提示 */
+.conflict-tooltip {
+  position: absolute;
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(248, 113, 113, 0.5);
+  border-radius: 8px;
+  padding: 0.8rem 1rem;
+  min-width: 220px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  z-index: 10000;
+  pointer-events: none;
+  animation: tooltipFadeIn 0.2s ease;
+}
+
+.conflict-tooltip .tooltip-title {
+  font-weight: 600;
+  color: #f87171;
+  margin-bottom: 0.6rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid rgba(248, 113, 113, 0.3);
+  font-size: 0.9rem;
+}
+
+@keyframes tooltipFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.conflict-tooltip .tooltip-header {
+  font-weight: 600;
+  color: #f87171;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid rgba(248, 113, 113, 0.3);
+  font-size: 0.9rem;
+}
+
+.conflict-tooltip .tooltip-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.conflict-tooltip .tooltip-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85rem;
+}
+
+.conflict-tooltip .tooltip-label {
+  color: #94a3b8;
+  font-weight: 400;
+}
+
+.conflict-tooltip .tooltip-value {
+  color: #ffffff;
+  font-weight: 500;
 }
 
 .apply-btn {

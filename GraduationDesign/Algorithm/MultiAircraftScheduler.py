@@ -119,23 +119,45 @@ class ConflictDetector:
             schedules: 所有航班的调度方案
 
         返回:
-            冲突列表（已去重）
+            冲突列表（已去重）- 每个冲突只出现一次，不管AB还是BA
         """
-        conflicts = []
+        # 使用字典存储冲突，key为(排序后的航班对, 节点ID, 时间分钟)，确保AB和BA是同一个key
+        conflict_dict = {}
+        
         flight_list = list(schedules.values())
-        seen_conflicts = set()  # 用于去重
-
+        
         # 两两检测冲突
         for i, sched1 in enumerate(flight_list):
             for sched2 in flight_list[i+1:]:
                 # 检测节点冲突
                 node_conflicts = self._detect_node_conflicts(sched1, sched2)
+                
                 for conflict in node_conflicts:
-                    # 创建唯一标识符用于去重
-                    conflict_key = (conflict.node_id, conflict.time)
-                    if conflict_key not in seen_conflicts:
-                        seen_conflicts.add(conflict_key)
-                        conflicts.append(conflict)
+                    # 关键：排序航班ID，确保AB和BA是同一个key
+                    sorted_flight_ids = tuple(sorted(conflict.flight_ids))
+                    
+                    # 时间精确到分钟
+                    if hasattr(conflict.time, 'strftime'):
+                        time_key = conflict.time.strftime('%Y%m%d%H%M')
+                    else:
+                        time_str = str(conflict.time)
+                        # 提取时间部分，忽略日期
+                        if ' ' in time_str:
+                            time_key = time_str.split(' ')[1][:5].replace(':', '')
+                        else:
+                            time_key = time_str[:4]
+                    
+                    # 唯一键：排序后的航班对 + 节点ID + 时间
+                    conflict_key = (sorted_flight_ids, conflict.node_id, time_key)
+                    
+                    # 只保留第一个（AB检测到的）
+                    if conflict_key not in conflict_dict:
+                        # 确保flight_ids也是排序的，这样显示时一致
+                        conflict.flight_ids = list(sorted_flight_ids)
+                        conflict_dict[conflict_key] = conflict
+        
+        # 返回去重后的冲突列表
+        return list(conflict_dict.values())
 
                 # 检测路径交叉冲突（暂时禁用，减少误报）
                 # crossing_conflicts = self._detect_crossing_conflicts(sched1, sched2)
@@ -147,6 +169,22 @@ class ConflictDetector:
 
         return conflicts
 
+    def _calculate_conflict_severity(self, time_diff: float) -> str:
+        """
+        计算冲突严重度 - 统一标准
+        
+        依据航空运营标准：
+        - HIGH: 时间差 < 30秒，紧急冲突，存在碰撞风险
+        - MEDIUM: 时间差 30-90秒，中度冲突，需要调整
+        - LOW: 时间差 > 90秒，轻度冲突，在可接受范围内
+        """
+        if time_diff < 30:
+            return 'high'
+        elif time_diff < 90:
+            return 'medium'
+        else:
+            return 'low'
+    
     def _detect_node_conflicts(self, sched1: AircraftSchedule,
                               sched2: AircraftSchedule) -> List[Conflict]:
         """检测节点冲突"""
@@ -158,13 +196,21 @@ class ConflictDetector:
                     # 同一节点，检查时间间隔
                     time_diff = abs((time1 - time2).total_seconds())
                     if time_diff < self.safety_margin:
+                        # 根据时间差判断严重度（基于ICAO最低间隔标准）
+                        # HIGH: <30秒 - 紧急冲突，必须立即处理
+                        # MEDIUM: 30-90秒 - 中度冲突，需要调整
+                        # LOW: >90秒 - 轻度冲突，可容忍
+                        severity = self._calculate_conflict_severity(time_diff)
+                        
+                        # 排序航班ID，确保一致性
+                        sorted_ids = sorted([sched1.flight.flight_id, sched2.flight.flight_id])
                         conflict = Conflict(
-                            conflict_id=f"node_{sched1.flight.flight_id}_{sched2.flight.flight_id}_{node1.id}",
+                            conflict_id=f"node_{sorted_ids[0]}_{sorted_ids[1]}_{node1.id}",
                             conflict_type='node',
-                            flight_ids=[sched1.flight.flight_id, sched2.flight.flight_id],
+                            flight_ids=sorted_ids,
                             node_id=node1.id,
                             time=time1 if time1 < time2 else time2,
-                            severity='high' if time_diff < 15 else 'medium'
+                            severity=severity
                         )
                         conflicts.append(conflict)
 
@@ -191,10 +237,12 @@ class ConflictDetector:
                         (time1_a, time1_b),
                         (time2_a, time2_b)
                     ):
+                        # 排序航班ID，确保一致性
+                        sorted_ids = sorted([sched1.flight.flight_id, sched2.flight.flight_id])
                         conflict = Conflict(
-                            conflict_id=f"cross_{sched1.flight.flight_id}_{sched2.flight.flight_id}",
+                            conflict_id=f"cross_{sorted_ids[0]}_{sorted_ids[1]}_{node1_a.id}_{node2_a.id}",
                             conflict_type='crossing',
-                            flight_ids=[sched1.flight.flight_id, sched2.flight.flight_id],
+                            flight_ids=sorted_ids,
                             node_id=node1_a.id,
                             time=time1_a if time1_a < time2_a else time2_a,
                             severity='high'
