@@ -601,15 +601,16 @@ class MultiAircraftScheduler:
 def generate_simulation_data(graph: AirportGraph, num_flights: int = 5) -> List[Flight]:
     """
     生成模拟航班数据
-
+    
     参数:
         graph: 机场路网图
         num_flights: 航班数量
-
+        
     返回:
         航班列表
     """
     import random
+    import math
 
     flights = []
     base_time = datetime(2024, 1, 20, 14, 0, 0)
@@ -624,21 +625,63 @@ def generate_simulation_data(graph: AirportGraph, num_flights: int = 5) -> List[
 
     # 创建A*优化器用于路径验证
     optimizer = AStarOptimizer(graph)
+    
+    # === 根据航班数量智能生成时间分布 ===
+    if num_flights < 20:
+        # 少量航班：均匀分布
+        time_offsets = [random.randint(0, 10800) for _ in range(num_flights)]
+    else:
+        # 大量航班：构造明显的高峰期、正常期、低峰期
+        time_offsets = []
+        
+        # 定义时段分配比例
+        # 高峰期: 40% 的航班集中在 14:30-15:00 (30分钟窗口)
+        # 正常期: 40% 的航班分散在 15:00-16:00 (60分钟窗口)
+        # 低峰期: 20% 的航班分散在 其他时间
+        
+        peak_count = int(num_flights * 0.4)      # 高峰期航班数
+        normal_count = int(num_flights * 0.4)    # 正常期航班数
+        off_peak_count = num_flights - peak_count - normal_count  # 低峰期航班数
+        
+        # 高峰期：14:30-15:00 (1800-3600秒)
+        # 使用正态分布集中在 14:40-14:50 (更密集)
+        for _ in range(peak_count):
+            center = 2700  # 14:45 中心
+            std = 300  # 5分钟标准差，确保大部分在30分钟内
+            u1, u2 = random.random(), random.random()
+            z = math.sqrt(-2 * math.log(u1)) * math.cos(2 * math.pi * u2)
+            offset = int(center + z * std)
+            offset = max(1800, min(3600, offset))  # 限制在14:30-15:00
+            time_offsets.append(offset)
+        
+        # 正常期：15:00-16:00 (3600-7200秒)
+        for _ in range(normal_count):
+            offset = random.randint(3600, 7200)
+            time_offsets.append(offset)
+        
+        # 低峰期：其他时间 (0-1800 和 7200-10800)
+        for _ in range(off_peak_count):
+            if random.random() < 0.5:
+                offset = random.randint(0, 1800)  # 14:00-14:30
+            else:
+                offset = random.randint(7200, 10800)  # 16:00-17:00
+            time_offsets.append(offset)
+        
+        # 打乱顺序
+        random.shuffle(time_offsets)
 
     attempts = 0
-    max_attempts = num_flights * 10  # 最多尝试10倍
+    max_attempts = num_flights * 10
 
-    while len(flights) < num_flights and attempts < max_attempts:
+    for time_offset in time_offsets:
         attempts += 1
-
+        
         # 随机选择起点和终点
         if len(flights) % 2 == 0:
-            # 离港：机位 -> 跑道
             start_node = random.choice(stands)
             end_node = random.choice(runways)
             operation = OperationType.DEPARTURE
         else:
-            # 进港：跑道 -> 机位
             start_node = random.choice(runways)
             end_node = random.choice(stands)
             operation = OperationType.ARRIVAL
@@ -649,11 +692,7 @@ def generate_simulation_data(graph: AirportGraph, num_flights: int = 5) -> List[
             print(f"  跳过: {start_node.id} -> {end_node.id} (无路径)")
             continue
 
-        # 随机时间（在3小时内）
-        time_offset = random.randint(0, 10800)
         scheduled_time = base_time + timedelta(seconds=time_offset)
-
-        # 随机优先级
         priority = random.choice(list(PriorityLevel))
 
         flight = Flight(
@@ -664,13 +703,37 @@ def generate_simulation_data(graph: AirportGraph, num_flights: int = 5) -> List[
             end_node=end_node,
             scheduled_time=scheduled_time,
             priority=priority,
-            speed=random.uniform(12.0, 18.0)  # 随机速度
+            speed=random.uniform(12.0, 18.0)
         )
 
         flights.append(flight)
-        print(f"  生成航班: {flight.flight_id} ({operation.value}) {start_node.id} -> {end_node.id}")
 
     print(f"成功生成 {len(flights)} 个航班 (尝试 {attempts} 次)")
+    
+    # 打印时间分布统计
+    if flights:
+        times = [f.scheduled_time for f in flights]
+        times.sort()
+        print(f"\n航班时间分布:")
+        print(f"  最早: {times[0].strftime('%H:%M')}")
+        print(f"  最晚: {times[-1].strftime('%H:%M')}")
+        
+        # 计算每30分钟的密度
+        from collections import defaultdict
+        half_hour_buckets = defaultdict(int)
+        for t in times:
+            bucket = t.hour * 2 + t.minute // 30
+            half_hour_buckets[bucket] += 1
+        
+        print(f"  30分钟窗口分布:")
+        for bucket in sorted(half_hour_buckets.keys()):
+            hour = bucket // 2
+            minute = (bucket % 2) * 30
+            count = half_hour_buckets[bucket]
+            density = count * 2  # 每小时密度
+            marker = " 🔥高峰" if density >= 40 else (" 🌙低峰" if density <= 15 else "")
+            print(f"    {hour:02d}:{minute:02d} - {count}架次 ({density}/小时){marker}")
+    
     return flights
 
 

@@ -1000,17 +1000,36 @@ def get_current_weights():
         error_response.headers.add('Access-Control-Allow-Origin', '*')
         return error_response, 500
 
+    return app.send_static_file('index.html')
+
+
+# ===== 前端路由支持 =====
+@app.route('/astar')
+def astar_page():
+    """A*算法页面"""
+    return app.send_static_file('index.html')
+
+
+@app.route('/<path:path>')
+def catch_all(path):
+    """处理前端路由 - 对于非API路由返回index.html"""
+    # 排除静态文件和API路由
+    if path.startswith('api/') or path.startswith('static/'):
+        return jsonify({'error': 'Not found'}), 404
+    # 返回前端index.html，让Vue Router处理路由
+    return app.send_static_file('index.html')
+
 
 if __name__ == '__main__':
-    print("\n" + "="*70)
+    print("\\n" + "="*70)
     print("机场场面滑行轨迹优化 - API服务")
     print("="*70)
-    print("\n服务地址: http://localhost:5001")
+    print("\\n服务地址: http://localhost:5001")
     print("API文档: http://localhost:5001/")
-    print("\n正在初始化系统...")
+    print("\\n正在初始化系统...")
     initialize_system()
-    print("\n" + "="*70)
+    print("\\n" + "="*70)
     print("服务启动中...")
-    print("="*70 + "\n")
+    print("="*70 + "\\n")
 
     app.run(host='0.0.0.0', port=5001, debug=True)

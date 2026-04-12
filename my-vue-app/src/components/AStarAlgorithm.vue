@@ -18,7 +18,7 @@
               class="main-tab-btn"
               :class="{ active: activeMainTab === 'demo' }"
               @click="activeMainTab = 'demo'">
-              <span class="main-tab-icon">🎮</span>
+              <span class="main-tab-icon">✈️</span>
               算法演示
             </button>
           </div>
@@ -105,8 +105,8 @@
                             v-model.number="flightCount"
                             :disabled="isScheduling"
                             min="10"
-                            max="100"
-                            placeholder="10-100"
+                            max="200"
+                            placeholder="10-200"
                             class="flight-count-input"
                             @input="validateFlightCount"
                           />
@@ -266,9 +266,9 @@
                     <div class="stat-label">总延误</div>
                     <div class="stat-value delay">{{ (statistics.total_delay / 60).toFixed(1) }} 分钟</div>
                   </div>
-                  <div class="stat-card" :class="statistics.total_conflicts > 0 ? 'has-conflicts' : 'no-conflicts'">
+                  <div class="stat-card" :class="allConflicts.length > 0 ? 'has-conflicts' : 'no-conflicts'">
                     <div class="stat-label">冲突数</div>
-                    <div class="stat-value">{{ statistics.total_conflicts / 2 }}</div>
+                    <div class="stat-value">{{ allConflicts.length }}</div>
                   </div>
                 </div>
 
@@ -363,9 +363,9 @@
                     <div
                       v-if="conflictTooltip.show"
                       class="conflict-tooltip"
-                      :style="{ 
-                        left: (conflictTooltip.x - 350) + 'px', 
-                        top: (conflictTooltip.y - 100) + 'px' 
+                      :style="{
+                        left: conflictTooltip.x + 'px',
+                        top: conflictTooltip.y + 'px'
                       }"
                     >
                       <div class="tooltip-title">⚠️ 冲突信息</div>
@@ -380,7 +380,7 @@
                         </div>
                         <div class="tooltip-row">
                           <span class="tooltip-label">冲突节点:</span>
-                          <span class="tooltip-value">{{ conflictTooltip.conflict.node_id }}</span>
+                          <span class="tooltip-value">{{ (conflictTooltip.conflict.node_ids || [conflictTooltip.conflict.node_id]).join(', ') }}</span>
                         </div>
                         <div class="tooltip-row">
                           <span class="tooltip-label">冲突时间:</span>
@@ -539,6 +539,7 @@
                       </div>
                       <div class="conflict-info">
                         <div>航班: {{ conflict.flight_ids.join(', ') }}</div>
+                        <div>冲突节点: {{ (conflict.node_ids || [conflict.node_id]).join(', ') }}</div>
                         <div>时间: {{ formatTime(conflict.time) }}</div>
                       </div>
                     </div>
@@ -739,6 +740,8 @@ export default {
         y: 0,
         conflict: null
       },
+      // 缓存冲突点位置信息用于精确检测
+      conflictPointPositions: [],
       multiBaseScale: 1.0,
       multiBaseOffsetX: 0,
       multiBaseOffsetY: 0,
@@ -748,6 +751,7 @@ export default {
       peakPeriods: [],
       offPeakPeriods: [],
       timePeriodAnalysis: null,
+      currentPeriodType: 'normal', // 当前时段类型: 'peak', 'off_peak', 'normal'
       weights: {
         distance: 1.0,
         time: 1.0,      // 滑行时间权重
@@ -760,9 +764,9 @@ export default {
   },
   computed: {
     allConflicts() {
-      // 使用 Map 彻底去重，key 为 "航班对+节点+时间"
+      // 使用 Map 去重，key 为 "航班对+时间"（忽略具体节点，同一时间的多个节点合并显示）
       const conflictMap = new Map();
-      
+
       this.schedules.forEach(schedule => {
         schedule.conflicts.forEach(conflict => {
           // 确保航班ID排序
@@ -773,20 +777,33 @@ export default {
             const parts = conflict.time.split(':');
             timeKey = `${parts[0]}:${parts[1]}`;
           }
-          // 唯一键
-          const uniqueKey = `${sortedFlightIds.join(',')}_${conflict.node_id}_${timeKey}`;
-          
+          // 使用航班对+时间作为唯一键（同一时间的冲突合并）
+          const uniqueKey = `${sortedFlightIds.join(',')}_${timeKey}`;
+
           if (!conflictMap.has(uniqueKey)) {
             // 创建新对象，不修改原始数据
             const normalizedConflict = {
               ...conflict,
-              flight_ids: sortedFlightIds
+              flight_ids: sortedFlightIds,
+              node_ids: [conflict.node_id] // 存储所有冲突节点
             };
             conflictMap.set(uniqueKey, normalizedConflict);
+          } else {
+            // 已存在相同航班对和时间的冲突，添加节点ID到列表
+            const existing = conflictMap.get(uniqueKey);
+            if (!existing.node_ids.includes(conflict.node_id)) {
+              existing.node_ids.push(conflict.node_id);
+            }
+            // 保留最高严重级别
+            if (conflict.severity === 'high' || existing.severity === 'high') {
+              existing.severity = 'high';
+            } else if (conflict.severity === 'medium' && existing.severity !== 'high') {
+              existing.severity = 'medium';
+            }
           }
         });
       });
-      
+
       return Array.from(conflictMap.values());
     }
   },
@@ -1080,11 +1097,11 @@ export default {
         return;
       }
       if (!Number.isInteger(value)) {
-        this.flightCountError = '请输入10-100的整数';
+        this.flightCountError = '请输入10-200的整数';
         return;
       }
-      if (value < 10 || value > 100) {
-        this.flightCountError = '请输入10-100的整数';
+      if (value < 10 || value > 200) {
+        this.flightCountError = '请输入10-200的整数';
         return;
       }
       this.flightCountError = '';
@@ -1172,6 +1189,13 @@ export default {
       this.statistics = null;
       this.selectedFlightIds = [];  // 清空选择状态
       this.manuallyCleared = false;  // 重置手动清除标记
+
+      // 重置时段分析
+      this.currentPeriodType = 'normal';
+      this.flightDensity = null;
+      this.peakPeriods = [];
+      this.offPeakPeriods = [];
+      this.timePeriodAnalysis = null;
 
       // 重置缩放和平移
       this.multiZoomLevel = 1.0;
@@ -1437,13 +1461,21 @@ export default {
         );
       }
 
+      // 清空冲突点位置缓存
+      this.conflictPointPositions = [];
+
       conflictsToDraw.forEach(conflict => {
+        // 获取该冲突涉及的所有节点ID（支持合并后的多节点冲突）
+        const nodeIds = conflict.node_ids || [conflict.node_id];
+
+        // 统一只绘制第一个节点的冲突点（代表整个冲突）
+        const firstNodeId = nodeIds[0];
         const schedule = this.schedules.find(s =>
-          s.path.some(p => p.id === conflict.node_id)
+          s.path.some(p => p.id === firstNodeId)
         );
 
         if (schedule) {
-          const point = schedule.path.find(p => p.id === conflict.node_id);
+          const point = schedule.path.find(p => p.id === firstNodeId);
           if (point) {
             const pos = this.multiTransform(point.x, point.y);
 
@@ -1488,6 +1520,14 @@ export default {
             // 重置阴影
             ctx.shadowColor = 'transparent';
             ctx.shadowBlur = 0;
+
+            // 记录冲突点位置信息，用于鼠标悬浮检测
+            this.conflictPointPositions.push({
+              x: pos.x,
+              y: pos.y,
+              size: conflictSize,
+              conflict: conflict
+            });
           }
         }
       });
@@ -1537,67 +1577,59 @@ export default {
     },
     
     checkConflictHover(event) {
-      // 直接通过 $refs 获取 canvas，确保能获取到
       const canvas = this.$refs.multiCanvas;
-      if (!canvas || !this.schedules.length) {
+      if (!canvas || !this.schedules.length || this.conflictPointPositions.length === 0) {
         this.conflictTooltip.show = false;
+        if (canvas) canvas.style.cursor = this.multiIsDragging ? 'grabbing' : 'grab';
         return;
       }
-      
-      // 保存 canvas 引用
+
       this.multiCanvas = canvas;
       const rect = canvas.getBoundingClientRect();
-      const mouseX = event.clientX - rect.left;
-      const mouseY = event.clientY - rect.top;
-      
-      // 获取需要绘制的冲突
-      let conflictsToDraw;
-      if (this.selectedFlightIds.length === 0) {
-        conflictsToDraw = this.allConflicts;
-      } else {
-        conflictsToDraw = this.allConflicts.filter(conflict =>
-          conflict.flight_ids.some(id => this.selectedFlightIds.includes(id))
-        );
-      }
-      
-      // 检查鼠标是否在某个冲突点上
+
+      // === 关键修复：考虑画布显示尺寸与内部像素尺寸的比例 ===
+      // 画布内部尺寸
+      const internalWidth = canvas.width;
+      const internalHeight = canvas.height;
+      // 画布显示尺寸
+      const displayWidth = rect.width;
+      const displayHeight = rect.height;
+      // 缩放比例
+      const scaleX = internalWidth / displayWidth;
+      const scaleY = internalHeight / displayHeight;
+
+      // 将鼠标坐标转换为内部像素坐标
+      const mouseX = (event.clientX - rect.left) * scaleX;
+      const mouseY = (event.clientY - rect.top) * scaleY;
+
+      // 精确检测：遍历所有缓存的冲突点
       let hoveredConflict = null;
-      
-      for (const conflict of conflictsToDraw) {
-        const schedule = this.schedules.find(s =>
-          s.path.some(p => p.id === conflict.node_id)
-        );
-        
-        if (schedule) {
-          const point = schedule.path.find(p => p.id === conflict.node_id);
-          if (point) {
-            const pos = this.multiTransform(point.x, point.y);
-            const baseSize = conflict.severity === 'high' ? 12 : 10;
-            const conflictSize = Math.max(6, Math.min(20, baseSize * Math.sqrt(this.multiZoomLevel)));
-            
-            // 计算鼠标与冲突点的距离
-            const distance = Math.sqrt(
-              Math.pow(mouseX - pos.x, 2) + Math.pow(mouseY - pos.y, 2)
-            );
-            
-            // 如果距离小于冲突点大小，认为是悬浮
-            if (distance <= conflictSize * 2.5) {
-              hoveredConflict = conflict;
-              break;
-            }
-          }
+      let conflictPos = null;
+
+      for (const pointInfo of this.conflictPointPositions) {
+        const dx = mouseX - pointInfo.x;
+        const dy = mouseY - pointInfo.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        // 只有当鼠标在内层实心圆内才触发
+        if (distance <= pointInfo.size) {
+          hoveredConflict = pointInfo.conflict;
+          conflictPos = { x: pointInfo.x / scaleX, y: pointInfo.y / scaleY }; // 转回显示坐标用于提示位置
+          break;
         }
       }
-      
-      if (hoveredConflict) {
+
+      if (hoveredConflict && conflictPos) {
         this.conflictTooltip = {
           show: true,
-          x: event.clientX + 15,
-          y: event.clientY - 10,
+          x: conflictPos.x + 15,
+          y: conflictPos.y - 10,
           conflict: hoveredConflict
         };
+        canvas.style.cursor = 'pointer';
       } else {
         this.conflictTooltip.show = false;
+        canvas.style.cursor = this.multiIsDragging ? 'grabbing' : 'grab';
       }
     },
 
@@ -1759,24 +1791,31 @@ export default {
             });
           }
           
-          this.pathAlternatives = filteredPaths;
-          // 将当前路径添加到列表中作为第一条
-          this.pathAlternatives.unshift({
-            path_id: 'path_original',
-            nodes: schedule.path.map(node => ({
-              id: node.id,
-              type: node.type || 'Node',
-              x: node.x,
-              y: node.y
-            })),
-            distance: schedule.total_distance,
-            time: schedule.total_time,
-            fuel: 0,
-            num_nodes: schedule.path.length,
-            rank: 0,
-            differences_from_best: { distance: 0, time: 0, fuel: 0 },
-            is_original: true
-          });
+          // 重新编号：原始路径为1，备选路径从2开始连续编号
+          this.pathAlternatives = [
+            // 将当前路径添加到列表中作为第一条
+            {
+              path_id: 'path_original',
+              nodes: schedule.path.map(node => ({
+                id: node.id,
+                type: node.type || 'Node',
+                x: node.x,
+                y: node.y
+              })),
+              distance: schedule.total_distance,
+              time: schedule.total_time,
+              fuel: 0,
+              num_nodes: schedule.path.length,
+              rank: 1,
+              differences_from_best: { distance: 0, time: 0, fuel: 0 },
+              is_original: true
+            },
+            // 过滤后的备选路径从2开始编号
+            ...filteredPaths.map((path, index) => ({
+              ...path,
+              rank: index + 2
+            }))
+          ];
           this.activePathId = 'path_original';
         } else {
           ElMessage.error('获取备选路径失败: ' + response.data.error);
@@ -1970,16 +2009,24 @@ export default {
         // 更新选中航班的路径
         this.selectedFlight.path = altPath.nodes;
 
+        // 更新 activePathId 为当前使用的路径
+        this.activePathId = altPath.path_id;
+
         // 取消预览状态
         this.isPreviewingPath = false;
         this.previewPathData = null;
 
         // 强制更新视图，确保冲突列表和冲突点消失
         this.$forceUpdate();
-        
+
         // 重新绘制所有路径（不包含已消解的冲突）
         this.$nextTick(() => {
           this.drawMultiAircraftPaths();
+
+          // 更新统计数据中的冲突数（使用 allConflicts 计算属性的结果）
+          if (this.statistics) {
+            this.statistics.total_conflicts = this.allConflicts.length;
+          }
         });
 
         // 关闭备选路径面板
@@ -2072,12 +2119,20 @@ export default {
           this.currentPeriodType = weightInfo.period_type;
           this.weightAdjustmentMode = 'auto';
 
-          // 显示提示信息
-          ElMessage.success({
+          // 显示提示信息 - 根据不同时段显示不同颜色
+          const messageConfig = {
             message: `当前时间段: ${weightInfo.description}`,
             duration: 3000,
             showClose: true
-          });
+          };
+
+          if (weightInfo.period_type === 'peak') {
+            ElMessage.error(messageConfig); // 高峰期 - 红色
+          } else if (weightInfo.period_type === 'normal') {
+            ElMessage.warning(messageConfig); // 正常期 - 黄色
+          } else {
+            ElMessage.success(messageConfig); // 低峰期 - 绿色
+          }
         }
       } catch (error) {
         console.error('获取当前权重失败:', error);
