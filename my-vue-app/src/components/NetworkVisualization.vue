@@ -721,28 +721,32 @@ export default {
 <style scoped>
 .network-visualization {
   width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .demo-controls {
   display: flex;
-  gap: 1rem;
+  gap: 0.5rem;
   align-items: center;
   flex-wrap: wrap;
-  margin-bottom: 1rem;
+  padding: 0.4rem;
   justify-content: center;
+  flex-shrink: 0;
 }
 
 .node-selection-controls {
   display: flex;
-  gap: 1rem;
+  gap: 0.5rem;
   align-items: center;
   flex-wrap: wrap;
-  padding: 1rem 1.2rem;
+  padding: 0.4rem 0.6rem;
   background: rgba(20, 30, 60, 0.6);
-  border-radius: 8px;
+  border-radius: 6px;
   border: 1px solid rgba(64, 224, 255, 0.3);
-  margin-bottom: 1.5rem;
   justify-content: center;
+  flex-shrink: 0;
 }
 
 .selection-group {
@@ -855,11 +859,12 @@ export default {
 }
 
 .info {
-  padding: 0.8rem 1.2rem;
-  border-radius: 5px;
-  font-size: 0.9rem;
+  padding: 0.3rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
   text-align: center;
-  margin-bottom: 1rem;
+  margin-bottom: 0.2rem;
+  flex-shrink: 0;
 }
 
 .info.success {
@@ -885,21 +890,23 @@ export default {
   display: flex;
   flex-direction: column;
   align-items: center;
-  margin: 1.5rem 0;
-  background: rgba(0, 0, 0, 0.5);
-  border-radius: 8px;
-  padding: 1rem;
-  overflow: auto;
-  min-height: 620px;
+  flex: 1;
+  min-height: 0;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 6px;
+  padding: 0.4rem;
+  overflow: hidden;
 }
 
 .canvas-container canvas {
-  max-width: 100%;
-  height: auto;
-  border: 2px solid rgba(64, 224, 255, 0.5);
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  border: 1px solid rgba(64, 224, 255, 0.3);
   border-radius: 4px;
   background: #0a1428;
-  box-shadow: 0 0 20px rgba(64, 224, 255, 0.3);
+  box-shadow: 0 0 15px rgba(64, 224, 255, 0.2);
   cursor: grab;
 }
 
@@ -909,13 +916,14 @@ export default {
 
 .canvas-controls {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.4rem;
   align-items: center;
-  margin-top: 1rem;
-  padding: 0.5rem 1rem;
+  margin-top: 0.3rem;
+  padding: 0.3rem 0.6rem;
   background: rgba(20, 30, 60, 0.6);
-  border-radius: 5px;
+  border-radius: 4px;
   border: 1px solid rgba(64, 224, 255, 0.3);
+  flex-shrink: 0;
 }
 
 .zoom-btn {
@@ -946,11 +954,12 @@ export default {
 }
 
 .path-stats {
-  margin-top: 1.5rem;
-  padding: 1.5rem;
+  margin-top: 0.3rem;
+  padding: 0.5rem;
   background: rgba(20, 30, 60, 0.6);
-  border-radius: 8px;
+  border-radius: 6px;
   border: 1px solid rgba(64, 224, 255, 0.2);
+  flex-shrink: 0;
 }
 
 .path-stats h4 {
@@ -987,11 +996,13 @@ export default {
 
 .legend {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 1.2rem;
-  padding: 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.5rem;
+  padding: 0.4rem;
   background: rgba(20, 30, 60, 0.4);
   border-radius: 5px;
+  flex-shrink: 0;
+  margin-top: 0.3rem;
 }
 
 .legend-section {

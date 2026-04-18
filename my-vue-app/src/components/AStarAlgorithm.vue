@@ -1,667 +1,403 @@
 <template>
-  <div class="algorithm-detail">
-    <div class="grid-background"></div>
-    <div class="particles"></div>
-    <div class="container">
-      <div class="algorithm-content">
-        <!-- 顶部主Tab栏 -->
-        <div class="main-tab-container">
-          <div class="main-tab-buttons">
-            <button
-              class="main-tab-btn"
-              :class="{ active: activeMainTab === 'details' }"
-              @click="activeMainTab = 'details'">
-              <span class="main-tab-icon">📖</span>
-              算法详情
-            </button>
-            <button
-              class="main-tab-btn"
-              :class="{ active: activeMainTab === 'demo' }"
-              @click="activeMainTab = 'demo'">
-              <span class="main-tab-icon">✈️</span>
-              算法演示
-            </button>
+  <div class="dashboard">
+    <!-- Background FX -->
+    <div class="grid-bg"></div>
+    <div class="particles-bg"></div>
+
+    <!-- Header -->
+    <header class="dash-header">
+      <div class="header-left">
+        <div class="logo">✈️</div>
+        <div class="title-group">
+          <h1 class="main-title">A*路径规划算法</h1>
+          <p class="sub-title">机场场面滑行轨迹优化系统</p>
+        </div>
+      </div>
+      <div class="header-center">
+        <div class="kpi-bar">
+          <div class="kpi-item">
+            <span class="kpi-label">航班数</span>
+            <span class="kpi-value">{{ statistics ? statistics.flight_count : flights.length || 0 }}</span>
+          </div>
+          <div class="kpi-item">
+            <span class="kpi-label">冲突数</span>
+            <span class="kpi-value" :class="{ danger: allConflicts.length > 0 }">{{ allConflicts.length }}</span>
+          </div>
+          <div class="kpi-item">
+            <span class="kpi-label">计算耗时</span>
+            <span class="kpi-value">{{ computeTime }}<small>ms</small></span>
+          </div>
+          <div class="kpi-item">
+            <span class="kpi-label">总距离</span>
+            <span class="kpi-value">{{ statistics ? (statistics.total_distance/1000).toFixed(2) : '0.00' }}<small>km</small></span>
           </div>
         </div>
-
-        <!-- 算法详情 -->
-        <div v-show="activeMainTab === 'details'">
-          <AlgorithmDetails />
+      </div>
+      <div class="header-right">
+        <div class="live-badge">
+          <span class="live-dot"></span>
+          <span>LIVE</span>
         </div>
+        <div class="clock">{{ currentTime }}</div>
+        <div class="sys-status" :class="getSystemStatusClass()">{{ getSystemStatusText() }}</div>
+      </div>
+    </header>
 
-        <!-- 算法演示 -->
-        <div v-show="activeMainTab === 'demo'">
-
-        <div class="visualization-section">
-          <h3>算法演示 - 西安机场路网</h3>
-
-          <!-- Tab 切换 -->
-          <div class="tab-container">
-            <div class="tab-buttons">
-              <button
-                class="tab-btn"
-                :class="{ active: activeTab === 'single' }"
-                @click="switchTab('single')">
-                <span class="tab-icon">✈️</span>
-                单航班演示
-              </button>
-              <button
-                class="tab-btn"
-                :class="{ active: activeTab === 'multi' }"
-                @click="switchTab('multi')">
-                <span class="tab-icon">🛫</span>
-                多航班调度
-              </button>
-            </div>
-
-            <div class="tab-content">
-              <!-- 单航班演示 -->
-              <div v-show="activeTab === 'single'" class="tab-panel">
-                <NetworkVisualization
-                  ref="networkViz"
-                  demo1ButtonName="演示1: 最远机位路径"
-                  demo2ButtonName="演示2: 机位到跑道"
-                  :toggleButtonText="{ showMore: '显示跑道点和观察点', showOnly: '只显示机位' }"
-                  hint="💡 滚轮缩放，拖拽移动 | 使用下方下拉列表选择起点和终点"
-                  resultPathName="A*优化路径"
-                  @loadData="loadDemo"
-                  @runDemo1="runFarthestStand"
-                  @runDemo2="runStandToRunway"
-                  @displayToggled="handleDisplayToggled"
-                  @runCustomPath="calculateCustomPath"
-                />
-              </div>
-
-              <!-- 多航班调度 -->
-              <div v-show="activeTab === 'multi'" class="tab-panel multi-aircraft-panel">
-                <!-- Excel文件上传区域 -->
-                <div class="upload-section">
-                  <div class="upload-header">
-                    <h4>📁 数据来源</h4>
-                    <div class="source-tabs">
-                      <button
-                        class="source-tab"
-                        :class="{ active: dataSource === 'random' }"
-                        @click="switchDataSource('random')">
-                        随机生成
-                      </button>
-                      <button
-                        class="source-tab"
-                        :class="{ active: dataSource === 'upload' }"
-                        @click="switchDataSource('upload')">
-                        上传文件
-                      </button>
-                    </div>
-                  </div>
-
-                  <!-- 随机生成模式 -->
-                  <div v-show="dataSource === 'random'" class="source-content">
-                    <div class="multi-controls">
-                      <div class="control-group flight-input-group">
-                        <div class="input-row">
-                          <label>航班数量:</label>
-                          <input
-                            type="number"
-                            v-model.number="flightCount"
-                            :disabled="isScheduling"
-                            min="10"
-                            max="200"
-                            placeholder="10-200"
-                            class="flight-count-input"
-                            @input="validateFlightCount"
-                          />
-                          <span class="unit">架</span>
-                        </div>
-                        <div v-if="flightCountError" class="error-row">{{ flightCountError }}</div>
-                      </div>
-
-                      <div class="control-group">
-                        <button
-                          @click="generateFlights"
-                          class="action-btn"
-                          :disabled="isScheduling || !!flightCountError">
-                          <span class="btn-icon">🎲</span> 生成航班
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- 文件上传模式 -->
-                  <div v-show="dataSource === 'upload'" class="source-content">
-                    <!-- 数据格式提示 -->
-                    <div class="format-hint">
-                      <h5>📋 Excel文件格式要求</h5>
-                      <p>请上传包含以下列的Excel文件：</p>
-                      <div class="format-table">
-                        <div class="format-row">
-                          <span class="format-column">flight_id</span>
-                          <span class="format-desc">航班ID（如：FL1001）</span>
-                        </div>
-                        <div class="format-row">
-                          <span class="format-column">aircraft_type</span>
-                          <span class="format-desc">机型（如：A320、B737）</span>
-                        </div>
-                        <div class="format-row">
-                          <span class="format-column">operation</span>
-                          <span class="format-desc">操作类型（departure/arrival）</span>
-                        </div>
-                        <div class="format-row">
-                          <span class="format-column">scheduled_time</span>
-                          <span class="format-desc">计划时间（格式：2024-01-20 14:00:00）</span>
-                        </div>
-                        <div class="format-row">
-                          <span class="format-column">start_node_id</span>
-                          <span class="format-desc">起始节点ID（数字）</span>
-                        </div>
-                        <div class="format-row">
-                          <span class="format-column">end_node_id</span>
-                          <span class="format-desc">目标节点ID（数字）</span>
-                        </div>
-                        <div class="format-row">
-                          <span class="format-column">priority</span>
-                          <span class="format-desc">优先级（1-10，数字越大优先级越高）</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <!-- 文件上传区域 -->
-                    <div class="upload-area">
-                      <div class="upload-controls">
-                        <input
-                          type="file"
-                          ref="fileInput"
-                          @change="handleFileChange"
-                          accept=".xlsx,.xls"
-                          style="display: none"
-                        />
-                        <button
-                          @click="$refs.fileInput?.click()"
-                          class="action-btn upload-btn"
-                          :disabled="isScheduling">
-                          <span class="btn-icon">📤</span> 选择文件
-                        </button>
-                        <span v-if="selectedFile" class="file-name">
-                          {{ selectedFile.name }}
-                        </span>
-                      </div>
-                      <button
-                        @click="extractFlightsFromExcel"
-                        class="action-btn primary extract-btn"
-                        :disabled="isScheduling || !selectedFile">
-                        <span class="btn-icon">📥</span> 提取航班信息
-                      </button>
-                    </div>
-
-                    <!-- 错误提示 -->
-                    <div v-if="uploadError" class="error-message">
-                      ⚠️ {{ uploadError }}
-                    </div>
-                  </div>
-                </div>
-
-                <!-- 调度控制 -->
-                <div class="multi-controls">
-                  <div class="control-group">
-                    <label>调度策略:</label>
-                    <select v-model="strategy" :disabled="isScheduling">
-                      <option value="fcfs">FCFS (先来先服务)</option>
-                      <option value="priority">优先级调度</option>
-                      <option value="time_window">时间窗调度</option>
-                    </select>
-                  </div>
-
-                  <div class="control-group">
-                    <button
-                      @click="scheduleFlights"
-                      class="action-btn primary"
-                      :disabled="isScheduling || !flights.length">
-                      <span class="btn-icon">▶️</span> {{ isScheduling ? '调度中...' : '开始调度' }}
-                    </button>
-                    <button
-                      @click="resetMulti"
-                      class="action-btn danger"
-                      :disabled="isScheduling">
-                      <span class="btn-icon">🔄</span> 重置
-                    </button>
-                  </div>
-                </div>
-
-                <!-- 当前时段状态指示器 -->
-                <div v-if="flights.length > 0 && weights" class="period-status-indicator">
-                  <div class="period-status-content" :class="currentPeriodType === 'peak' ? 'peak' : (currentPeriodType === 'off_peak' ? 'off-peak' : 'normal')">
-                    <div class="period-status-icon">
-                      {{ currentPeriodType === 'peak' ? '🔴' : (currentPeriodType === 'off_peak' ? '🟢' : '🟡') }}
-                    </div>
-                    <div class="period-status-text">
-                      <div class="period-status-title">
-                        {{ currentPeriodType === 'peak' ? '当前处于高峰时段' : (currentPeriodType === 'off_peak' ? '当前处于低峰时段' : '当前处于正常时段') }}
-                      </div>
-                      <div class="period-status-desc">
-                        {{ currentPeriodType === 'peak' ? 'A*算法将优先优化滑行时间（提升准点率）' : (currentPeriodType === 'off_peak' ? 'A*算法将优先优化燃料消耗（提升经济性）' : 'A*算法平衡考虑时间和燃料消耗') }}
-                      </div>
-                      <div class="period-weights-detail">
-                        <span>时间权重: <strong>{{ weights.time.toFixed(1) }}</strong></span>
-                        <span class="weight-separator">|</span>
-                        <span>燃料权重: <strong>{{ weights.fuel.toFixed(1) }}</strong></span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- 统计信息 -->
-                <div v-if="statistics" class="multi-stats">
-                  <div class="stat-card">
-                    <div class="stat-label">航班总数</div>
-                    <div class="stat-value">{{ statistics.flight_count }}</div>
-                  </div>
-                  <div class="stat-card">
-                    <div class="stat-label">总距离</div>
-                    <div class="stat-value">{{ (statistics.total_distance / 1000).toFixed(2) }} km</div>
-                  </div>
-                  <div class="stat-card">
-                    <div class="stat-label">总时间</div>
-                    <div class="stat-value">{{ (statistics.total_time / 60).toFixed(1) }} 分钟</div>
-                  </div>
-                  <div class="stat-card">
-                    <div class="stat-label">总延误</div>
-                    <div class="stat-value delay">{{ (statistics.total_delay / 60).toFixed(1) }} 分钟</div>
-                  </div>
-                  <div class="stat-card" :class="allConflicts.length > 0 ? 'has-conflicts' : 'no-conflicts'">
-                    <div class="stat-label">冲突数</div>
-                    <div class="stat-value">{{ allConflicts.length }}</div>
-                  </div>
-                </div>
-
-                <!-- 时间段与权重信息 -->
-                <div v-if="timePeriodAnalysis || weights" class="period-weight-section">
-                  <h4>📊 时间段分析与权重配置</h4>
-                  <div class="period-weight-content">
-                    <!-- 时间段分析 -->
-                    <div v-if="timePeriodAnalysis" class="period-analysis">
-                      <div class="period-summary">
-                        <div class="period-item">
-                          <span class="period-label">航班密度分析：</span>
-                          <span class="period-value">{{ timePeriodAnalysis.flight_count }} 个航班</span>
-                        </div>
-                        <div class="period-item">
-                          <span class="period-label">时间范围：</span>
-                          <span class="period-value">{{ formatDateTime(timePeriodAnalysis.time_range.start) }} - {{ formatDateTime(timePeriodAnalysis.time_range.end) }}</span>
-                        </div>
-                        <div class="period-item">
-                          <span class="period-label">平均密度：</span>
-                          <span class="period-value">{{ timePeriodAnalysis.average_density.toFixed(2) }} 航班/小时</span>
-                        </div>
-                        <div class="period-item">
-                          <span class="period-label">高峰期窗口：</span>
-                          <span class="period-value">{{ timePeriodAnalysis.peak_windows.length }} 个</span>
-                        </div>
-                        <div class="period-item">
-                          <span class="period-label">低峰期窗口：</span>
-                          <span class="period-value">{{ timePeriodAnalysis.off_peak_windows.length }} 个</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <!-- 权重配置 -->
-                    <div class="weight-config">
-                      <div class="weight-header">
-                        <div class="weight-title">
-                          <span>⚖️ 多目标A*算法权重</span>
-                          <span class="weight-mode">{{ weightAdjustmentMode === 'auto' ? '（自动调整）' : '（手动调整）' }}</span>
-                        </div>
-                        <div class="weight-controls">
-                          <button @click="adjustWeightsAuto" class="weight-btn auto" :disabled="weightAdjustmentMode === 'auto'">自动</button>
-                          <button @click="adjustWeightsManually" class="weight-btn manual" :disabled="weightAdjustmentMode === 'manual'">手动</button>
-                        </div>
-                      </div>
-                      <div class="weight-values">
-                        <div class="weight-item">
-                          <span class="weight-label">距离权重：</span>
-                          <span class="weight-value">{{ weights.distance.toFixed(1) }}</span>
-                          <span class="weight-desc">（最短路径）</span>
-                        </div>
-                        <div class="weight-item">
-                          <span class="weight-label">时间权重：</span>
-                          <span class="weight-value">{{ weights.time.toFixed(1) }}</span>
-                          <span class="weight-desc">（滑行时间）</span>
-                        </div>
-                        <div class="weight-item">
-                          <span class="weight-label">燃料权重：</span>
-                          <span class="weight-value">{{ weights.fuel.toFixed(1) }}</span>
-                          <span class="weight-desc">（燃料消耗）</span>
-                        </div>
-                      </div>
-                      <div class="weight-description">
-                        <p v-if="weightAdjustmentMode === 'auto'">
-                          🚦 当前根据航班密度自动调整权重：
-                          <span v-if="currentPeriodType === 'peak'" class="period-indicator peak">高峰时段 - 优先准点率（时间权重较高）</span>
-                          <span v-else-if="currentPeriodType === 'off_peak'" class="period-indicator off-peak">低峰时段 - 优先经济性（燃料权重较高）</span>
-                          <span v-else class="period-indicator normal">正常时段 - 平衡考虑</span>
-                        </p>
-                        <p v-else>⚙️ 手动调整模式：权重值固定，不随航班密度变化</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- 可视化画布 -->
-                <div v-if="schedules.length || multiNodesLoaded" class="multi-visualization">
-                  <div style="position: relative;">
-                    <canvas
-                      ref="multiCanvas"
-                      width="1200"
-                      height="600"
-                      @wheel="handleMultiWheel"
-                      @mousedown="handleMultiMouseDown"
-                      @mousemove="handleMultiMouseMove"
-                      @mouseup="handleMultiMouseUp"
-                      @mouseleave="handleMultiMouseUp"
-                      class="multi-canvas"
-                    ></canvas>
-                    
-                    <!-- 冲突点悬浮提示 -->
-                    <div
-                      v-if="conflictTooltip.show"
-                      class="conflict-tooltip"
-                      :style="{
-                        left: conflictTooltip.x + 'px',
-                        top: conflictTooltip.y + 'px'
-                      }"
-                    >
-                      <div class="tooltip-title">⚠️ 冲突信息</div>
-                      <div class="tooltip-content">
-                        <div class="tooltip-row">
-                          <span class="tooltip-label">航班1:</span>
-                          <span class="tooltip-value">{{ conflictTooltip.conflict.flight_ids[0] }}</span>
-                        </div>
-                        <div class="tooltip-row">
-                          <span class="tooltip-label">航班2:</span>
-                          <span class="tooltip-value">{{ conflictTooltip.conflict.flight_ids[1] }}</span>
-                        </div>
-                        <div class="tooltip-row">
-                          <span class="tooltip-label">冲突节点:</span>
-                          <span class="tooltip-value">{{ (conflictTooltip.conflict.node_ids || [conflictTooltip.conflict.node_id]).join(', ') }}</span>
-                        </div>
-                        <div class="tooltip-row">
-                          <span class="tooltip-label">冲突时间:</span>
-                          <span class="tooltip-value">{{ formatTime(conflictTooltip.conflict.time) }}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div class="canvas-controls">
-                    <button @click="multiZoomIn" class="zoom-btn">放大 +</button>
-                    <button @click="multiZoomOut" class="zoom-btn">缩小 -</button>
-                    <button @click="multiResetView" class="zoom-btn">重置</button>
-                    <span class="zoom-level">缩放: {{ (multiZoomLevel * 100).toFixed(0) }}%</span>
-                  </div>
-
-                  <div class="canvas-controls-mini" v-if="multiNodesLoaded">
-                    <button @click="toggleMultiDisplay" class="mini-btn">
-                      {{ showCoreNodesOnly ? '显示所有节点' : '只显示机位' }}
-                    </button>
-                    <span class="info-text">已加载 {{ multiNodes.length }} 个节点 + {{ multiEdges.length }} 条边</span>
-                  </div>
-
-                  <div class="canvas-legend">
-                    <div class="legend-section">
-                      <div class="legend-title">路径颜色</div>
-                      <div class="legend-item">
-                        <span class="legend-dot departure"></span>
-                        <span>离港路径（粉色系）</span>
-                      </div>
-                      <div class="legend-item">
-                        <span class="legend-dot arrival"></span>
-                        <span>进港路径（蓝色系）</span>
-                      </div>
-                    </div>
-                    <div class="legend-section">
-                      <div class="legend-title">航班标注</div>
-                      <div class="legend-item">
-                        <span class="legend-circle-filled"></span>
-                        <span>实心圆 = 起点位置</span>
-                      </div>
-                      <div class="legend-item">
-                        <span class="legend-circle-hollow"></span>
-                        <span>空心圆 = 终点位置</span>
-                      </div>
-                      <div class="legend-item">
-                        <span class="legend-text">FL1000</span>
-                        <span>航班ID标签</span>
-                      </div>
-                    </div>
-                    <div class="legend-section">
-                      <div class="legend-title">其他</div>
-                      <div class="legend-item">
-                        <span class="legend-dot conflict"></span>
-                        <span>冲突点（红色光晕+感叹号）</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- 航班列表 -->
-                <div v-if="flights.length" class="flights-list">
-                  <div class="flights-list-header">
-                    <h4>航班列表</h4>
-                    <div class="flight-controls">
-                      <span class="selected-count" v-if="schedules.length">
-                        已选择: {{ selectedFlightIds.length }} / {{ flights.length }}
-                      </span>
-                      <button
-                        v-if="schedules.length"
-                        @click="toggleSelectAll"
-                        class="select-btn">
-                        {{ selectedFlightIds.length === flights.length ? '取消全选' : '全选' }}
-                      </button>
-                      <button
-                        v-if="selectedFlightIds.length > 0"
-                        @click="clearSelection"
-                        class="select-btn clear">
-                        清除选择
-                      </button>
-                    </div>
-                  </div>
-                  <div class="flight-table-container">
-                    <table class="flight-table">
-                      <thead>
-                        <tr>
-                          <th class="col-checkbox">选择</th>
-                          <th class="col-flight-id">航班ID</th>
-                          <th class="col-type">机型</th>
-                          <th class="col-operation">任务</th>
-                          <th class="col-start">起点</th>
-                          <th class="col-end">终点</th>
-                          <th class="col-time">时间</th>
-                          <th class="col-distance">距离</th>
-                          <th class="col-delay">延误</th>
-                          <th class="col-action">操作</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr
-                          v-for="flight in flights"
-                          :key="flight.flight_id"
-                          :class="[getFlightStatusClass(flight), { 'selected': selectedFlightIds.includes(flight.flight_id) }]"
-                          @click="toggleFlightSelection(flight.flight_id)">
-                          <td class="col-checkbox">
-                            <input
-                              type="checkbox"
-                              :checked="selectedFlightIds.includes(flight.flight_id)"
-                              @click.stop="toggleFlightSelection(flight.flight_id)"
-                              :disabled="!schedules.length" />
-                          </td>
-                          <td class="col-flight-id">{{ flight.flight_id }}</td>
-                          <td class="col-type">{{ flight.aircraft_type }}</td>
-                          <td class="col-operation" :class="flight.operation">
-                            {{ flight.operation === 'departure' ? '离港' : '进港' }}
-                          </td>
-                          <td class="col-start">
-                            <span class="node-badge" :class="flight.start_node_type">{{ flight.start_node_id }}</span>
-                          </td>
-                          <td class="col-end">
-                            <span class="node-badge" :class="flight.end_node_type">{{ flight.end_node_id }}</span>
-                          </td>
-                          <td class="col-time">{{ formatTime(flight.scheduled_time) }}</td>
-                          <td class="col-distance">
-                            {{ getScheduleResult(flight.flight_id) ? (getScheduleResult(flight.flight_id).total_distance / 1000).toFixed(2) + ' km' : '-' }}
-                          </td>
-                          <td class="col-delay" :class="{ 'has-delay': getScheduleResult(flight.flight_id) && getScheduleResult(flight.flight_id).delay > 0 }">
-                            {{ getScheduleResult(flight.flight_id) ? (getScheduleResult(flight.flight_id).delay / 60).toFixed(1) + ' 分钟' : '-' }}
-                          </td>
-                          <td class="col-action">
-                            <button
-                              v-if="getScheduleResult(flight.flight_id)"
-                              @click.stop="showPathAlternatives(flight)"
-                              class="view-alternatives-btn">
-                              🛤️ 备选路径
-                            </button>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                <!-- 冲突列表 -->
-                <div v-if="allConflicts.length" class="conflicts-list">
-                  <h4>检测到的冲突 ({{ allConflicts.length }})</h4>
-                  <div class="conflict-cards">
-                    <div
-                      v-for="conflict in allConflicts"
-                      :key="conflict.conflict_id"
-                      class="conflict-card"
-                      :class="conflict.severity">
-                      <div class="conflict-header">
-                        <span class="conflict-type">{{ getConflictTypeText(conflict.conflict_type) }}</span>
-                        <span class="conflict-severity">{{ conflict.severity }}</span>
-                      </div>
-                      <div class="conflict-info">
-                        <div>航班: {{ conflict.flight_ids.join(', ') }}</div>
-                        <div>冲突节点: {{ (conflict.node_ids || [conflict.node_id]).join(', ') }}</div>
-                        <div>时间: {{ formatTime(conflict.time) }}</div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-        </div>
-
-        <button class="back-btn" @click="goBack">返回首页</button>
+    <!-- Tab Switcher -->
+    <div class="tab-bar">
+      <div class="tab-pills">
+        <button :class="{ active: activeTab === 'single' }" @click="switchTab('single')">单航班演示</button>
+        <button :class="{ active: activeTab === 'multi' }" @click="switchTab('multi')">多航班调度</button>
       </div>
     </div>
 
-    <!-- 备选路径侧边栏（移到最外层，fixed定位） -->
+    <!-- Main Grid -->
+    <main class="main-grid">
+      <!-- Left Sidebar -->
+      <aside class="sidebar left">
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">控制面板</span>
+          </div>
+          <div class="panel-body compact">
+            <!-- Single-flight controls -->
+            <div v-if="activeTab === 'single'" class="icon-row">
+              <button class="icon-btn" @click="loadDemo" title="加载路网">
+                <span class="ico">🗺️</span><span>路网</span>
+              </button>
+              <button class="icon-btn" @click="runFarthestStand" title="最远机位">
+                <span class="ico">📍</span><span>最远</span>
+              </button>
+              <button class="icon-btn" @click="runStandToRunway" title="机位到跑道">
+                <span class="ico">✈️</span><span>跑道</span>
+              </button>
+            </div>
+            <!-- Multi-flight controls -->
+            <div v-else class="icon-row">
+              <button class="icon-btn" @click="showUploadModal = true" title="上传航班">
+                <span class="ico">📤</span><span>上传</span>
+              </button>
+              <button class="icon-btn" @click="showSettingsPanel = !showSettingsPanel" title="参数设置">
+                <span class="ico">⚙️</span><span>设置</span>
+              </button>
+              <button class="icon-btn" @click="generateFlights" :disabled="isScheduling" title="随机生成">
+                <span class="ico">🎲</span><span>生成</span>
+              </button>
+            </div>
+            <div v-show="showSettingsPanel && activeTab === 'multi'" class="settings-drawer">
+              <div class="field">
+                <label>调度策略</label>
+                <select v-model="strategy" :disabled="isScheduling">
+                  <option value="fcfs">FCFS</option>
+                  <option value="priority">优先级</option>
+                  <option value="time_window">时间窗</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>航班数量</label>
+                <input type="number" v-model.number="flightCount" :disabled="isScheduling" min="10" max="200" />
+                <div v-if="flightCountError" class="err">{{ flightCountError }}</div>
+              </div>
+              <div class="field actions">
+                <button class="btn primary" @click="scheduleFlights" :disabled="isScheduling || !flights.length">
+                  {{ isScheduling ? '调度中...' : '开始调度' }}
+                </button>
+                <button class="btn danger" @click="resetMulti" :disabled="isScheduling">重置</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header"><span class="panel-title">时段状态</span></div>
+          <div class="panel-body">
+            <div class="period-badge" :class="currentPeriodType">
+              <div class="dot"></div>
+              <div class="txt">
+                <div class="period-title">
+                  {{ currentPeriodType==='peak'?'高峰时段':(currentPeriodType==='off_peak'?'低峰时段':'正常时段') }}
+                </div>
+                <div class="period-sub">时间权重 {{ weights.time.toFixed(1) }} | 燃料权重 {{ weights.fuel.toFixed(1) }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header"><span class="panel-title">航班状态</span></div>
+          <div class="panel-body center">
+            <div class="pie-wrap">
+              <div class="pie" :style="pieStyle"></div>
+              <div class="pie-legend">
+                <div v-for="s in getOperationStats()" :key="s.label" class="pie-lv">
+                  <span class="dot" :style="{ background: s.color }"></span>
+                  <span>{{ s.label }} {{ s.value }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header"><span class="panel-title">当前策略</span></div>
+          <div class="panel-body center">
+            <div class="strategy-ring" :class="strategy">
+              <div class="ring-inner">
+                <div class="ring-label">{{ strategy==='fcfs'?'FCFS':(strategy==='priority'?'优先级':'时间窗') }}</div>
+                <div class="ring-sub">调度策略</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Center Area -->
+      <section class="center-area">
+        <div class="map-panel">
+          <!-- Single Flight -->
+          <div v-show="activeTab === 'single'" class="single-map-wrap">
+            <NetworkVisualization
+              ref="networkViz"
+              demo1ButtonName="最远机位路径"
+              demo2ButtonName="机位到跑道"
+              :toggleButtonText="{ showMore: '显示跑道点和观察点', showOnly: '只显示机位' }"
+              hint="滚轮缩放，拖拽移动 | 使用下方下拉列表选择起点和终点"
+              resultPathName="A*优化路径"
+              @loadData="loadDemo"
+              @runDemo1="runFarthestStand"
+              @runDemo2="runStandToRunway"
+              @displayToggled="handleDisplayToggled"
+              @runCustomPath="calculateCustomPath"
+            />
+          </div>
+          <!-- Multi Flight -->
+          <div v-show="activeTab === 'multi'" class="multi-map-wrap">
+            <div class="canvas-box">
+              <canvas
+                ref="multiCanvas"
+                width="1200"
+                height="800"
+                @wheel="handleMultiWheel"
+                @mousedown="handleMultiMouseDown"
+                @mousemove="handleMultiMouseMove"
+                @mouseup="handleMultiMouseUp"
+                @mouseleave="handleMultiMouseUp"
+              ></canvas>
+              <div v-if="conflictTooltip.show" class="conflict-tooltip"
+                :style="{ left: conflictTooltip.x + 'px', top: conflictTooltip.y + 'px' }">
+                <div class="tt-title">⚠️ 冲突信息</div>
+                <div class="tt-row"><span>航班1:</span><b>{{ conflictTooltip.conflict.flight_ids[0] }}</b></div>
+                <div class="tt-row"><span>航班2:</span><b>{{ conflictTooltip.conflict.flight_ids[1] }}</b></div>
+                <div class="tt-row"><span>节点:</span><b>{{ (conflictTooltip.conflict.node_ids||[conflictTooltip.conflict.node_id]).join(', ') }}</b></div>
+                <div class="tt-row"><span>时间:</span><b>{{ formatTime(conflictTooltip.conflict.time) }}</b></div>
+              </div>
+            </div>
+            <div class="canvas-toolbar">
+              <button @click="multiZoomIn">+</button>
+              <button @click="multiZoomOut">−</button>
+              <button @click="multiResetView">重置</button>
+              <button @click="toggleMultiDisplay">{{ showCoreNodesOnly ? '显示全部' : '仅机位' }}</button>
+              <span class="zoom-txt">{{ (multiZoomLevel*100).toFixed(0) }}%</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right Sidebar -->
+      <aside class="sidebar right">
+        <!-- Flight List -->
+        <div class="panel flight-panel">
+          <div class="panel-header">
+            <span class="panel-title">航班列表</span>
+            <div class="flight-ops" v-if="schedules.length">
+              <span class="sel-text">{{ selectedFlightIds.length }}/{{ flights.length }}</span>
+              <button class="mini-btn" @click="toggleSelectAll">{{ selectedFlightIds.length === flights.length ? '取消' : '全选' }}</button>
+            </div>
+          </div>
+          <div class="panel-body">
+            <div class="flight-list">
+              <div v-for="flight in flights" :key="flight.flight_id"
+                class="flight-card"
+                :class="[getFlightStatusClass(flight), { selected: selectedFlightIds.includes(flight.flight_id) }]"
+                @click="toggleFlightSelection(flight.flight_id)">
+                <div class="flight-main">
+                  <input type="checkbox" :checked="selectedFlightIds.includes(flight.flight_id)"
+                    @click.stop="toggleFlightSelection(flight.flight_id)" :disabled="!schedules.length" class="fc-check" />
+                  <div class="flight-info">
+                    <div class="flight-top">
+                      <span class="fid">{{ flight.flight_id }}</span>
+                      <span class="ftype">{{ flight.aircraft_type }}</span>
+                      <span class="fop" :class="flight.operation">{{ flight.operation==='departure'?'离港':'进港' }}</span>
+                    </div>
+                    <div class="flight-mid" v-if="getScheduleResult(flight.flight_id)">
+                      <span>📏 {{ (getScheduleResult(flight.flight_id).total_distance/1000).toFixed(2) }}km</span>
+                      <span>⏱ {{ (getScheduleResult(flight.flight_id).total_time/60).toFixed(1) }}min</span>
+                      <span :class="{ warn: getScheduleResult(flight.flight_id).delay > 0 }">
+                        延误 {{ (getScheduleResult(flight.flight_id).delay/60).toFixed(1) }}min
+                      </span>
+                    </div>
+                    <div class="flight-mid" v-else>
+                      <span>计划 {{ formatTime(flight.scheduled_time) }}</span>
+                      <span>优先级 {{ flight.priority }}</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="flight-actions" v-if="getScheduleResult(flight.flight_id)">
+                  <button v-if="getScheduleResult(flight.flight_id).conflict_count > 0"
+                    class="alt-btn danger"
+                    @click.stop="showPathAlternatives(flight)">
+                    ⚠️ 冲突消解
+                  </button>
+                  <button v-else class="alt-btn safe" disabled>
+                    ✓ 无冲突
+                  </button>
+                </div>
+              </div>
+              <div v-if="!flights.length" class="alarm-empty">暂无航班数据</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Conflict List -->
+        <div class="panel alarm-panel">
+          <div class="panel-header">
+            <span class="panel-title">实况报警</span>
+            <span class="alarm-badge" :class="{ danger: allConflicts.length > 0 }">{{ allConflicts.length }}</span>
+          </div>
+          <div class="panel-body">
+            <div class="alarm-list">
+              <div v-for="c in allConflicts.slice(0, 6)" :key="c.conflict_id" class="alarm-card" :class="c.severity">
+                <div class="alarm-row">
+                  <span class="alarm-type">{{ getConflictTypeText(c.conflict_type) }}</span>
+                  <span class="alarm-time">{{ formatTime(c.time) }}</span>
+                </div>
+                <div class="alarm-flights">{{ c.flight_ids.join(' / ') }}</div>
+                <div class="alarm-node">节点 {{ (c.node_ids||[c.node_id]).join(', ') }}</div>
+              </div>
+              <div v-if="!allConflicts.length" class="alarm-empty">暂无冲突</div>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <!-- Footer -->
+    <footer class="dash-footer">
+      <div class="footer-card">
+        <div class="f-title">冲突等级分布</div>
+        <div class="ring-chart-wrap">
+          <div class="ring-chart">
+            <div class="ring-segment high" :style="{ flex: Math.max(1, allConflicts.filter(c=>c.severity==='high').length) }"></div>
+            <div class="ring-segment medium" :style="{ flex: Math.max(1, allConflicts.filter(c=>c.severity==='medium').length) }"></div>
+            <div class="ring-segment safe" :style="{ flex: Math.max(1, flights.length - allConflicts.length) }"></div>
+          </div>
+          <div class="ring-legend-v">
+            <div><span class="lg-dot" style="background:#f44336"></span>高危 {{ allConflicts.filter(c=>c.severity==='high').length }}</div>
+            <div><span class="lg-dot" style="background:#ff9800"></span>中危 {{ allConflicts.filter(c=>c.severity==='medium').length }}</div>
+            <div><span class="lg-dot" style="background:#4ade80"></span>正常 {{ Math.max(0, flights.length - allConflicts.length) }}</div>
+          </div>
+        </div>
+      </div>
+      <div class="footer-card stats-footer">
+        <div class="f-title">概况统计</div>
+        <div class="big-stat-grid footer-stats">
+          <div class="big-stat">
+            <div class="big-num">{{ statistics ? statistics.flight_count : flights.length || 0 }}</div>
+            <div class="big-label">航班总数</div>
+          </div>
+          <div class="big-stat">
+            <div class="big-num">{{ statistics ? (statistics.total_distance/1000).toFixed(2) : '0.00' }}</div>
+            <div class="big-label">总距离(km)</div>
+          </div>
+          <div class="big-stat">
+            <div class="big-num">{{ statistics ? (statistics.total_time/60).toFixed(1) : '0.0' }}</div>
+            <div class="big-label">总时间(min)</div>
+          </div>
+          <div class="big-stat">
+            <div class="big-num" :class="{ warn: statistics && statistics.total_delay > 0 }">
+              {{ statistics ? (statistics.total_delay/60).toFixed(1) : '0.0' }}
+            </div>
+            <div class="big-label">总延误(min)</div>
+          </div>
+        </div>
+      </div>
+      <div class="footer-card">
+        <div class="f-title">延误概览</div>
+        <div class="delay-overview">
+          <div class="d-circle" :class="{ warn: statistics && statistics.total_delay > 0 }">
+            <div class="d-num">{{ statistics ? (statistics.total_delay/60).toFixed(1) : '0.0' }}</div>
+            <div class="d-unit">分钟</div>
+          </div>
+          <div class="d-bars">
+            <div class="d-row">
+              <span>平均延误</span>
+              <div class="d-track"><div class="d-fill" :style="{ width: Math.min(100, (statistics?(statistics.total_delay/statistics.flight_count/60):0)*10)+'%' }"></div></div>
+            </div>
+            <div class="d-row">
+              <span>平均距离</span>
+              <div class="d-track"><div class="d-fill blue" :style="{ width: Math.min(100, (statistics?(statistics.total_distance/statistics.flight_count/100):0))+'%' }"></div></div>
+            </div>
+            <div class="d-row">
+              <span>平均时间</span>
+              <div class="d-track"><div class="d-fill cyan" :style="{ width: Math.min(100, (statistics?(statistics.total_time/statistics.flight_count/60):0)*3)+'%' }"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </footer>
+
+    <!-- Upload Modal -->
+    <div v-if="showUploadModal" class="modal-overlay" @click.self="showUploadModal = false">
+      <div class="modal-box">
+        <div class="modal-head">
+          <h3>📁 上传航班数据</h3>
+          <button class="modal-close" @click="showUploadModal = false">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="source-tabs">
+            <button :class="{ active: dataSource === 'random' }" @click="switchDataSource('random')">随机生成</button>
+            <button :class="{ active: dataSource === 'upload' }" @click="switchDataSource('upload')">上传文件</button>
+          </div>
+          <div v-show="dataSource === 'random'" class="source-content">
+            <label>航班数量: <input type="number" v-model.number="flightCount" min="10" max="200" /></label>
+            <button class="btn primary" @click="generateFlights" :disabled="isScheduling">🎲 生成航班</button>
+          </div>
+          <div v-show="dataSource === 'upload'" class="source-content">
+            <input type="file" ref="fileInput" @change="handleFileChange" accept=".xlsx,.xls" style="display:none" />
+            <button class="btn" @click="$refs.fileInput?.click()">📤 选择文件</button>
+            <span v-if="selectedFile" class="file-tag">{{ selectedFile.name }}</span>
+            <button class="btn primary" @click="extractFlightsFromExcel" :disabled="!selectedFile">📥 提取航班</button>
+            <div v-if="uploadError" class="err">{{ uploadError }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Path Alternatives Sidebar -->
     <transition name="slide">
-      <div v-if="showPathAlternativesPanel" class="path-alternatives-sidebar">
-        <div class="sidebar-header">
+      <div v-if="showPathAlternativesPanel" class="alt-sidebar">
+        <div class="alt-head">
           <h3>🛤️ 路径选项</h3>
           <button @click="closePathAlternatives" class="close-btn">×</button>
         </div>
-
-        <div class="sidebar-content">
-          <div v-if="selectedFlight" class="selected-flight-info">
+        <div class="alt-body">
+          <div v-if="selectedFlight" class="alt-info">
             <h4>{{ selectedFlight.flight_id }}</h4>
-            <div class="flight-details">
-              <span class="detail-item">{{ selectedFlight.aircraft_type }}</span>
-              <span class="detail-item" :class="selectedFlight.operation">
-                {{ selectedFlight.operation === 'departure' ? '离港' : '进港' }}
-              </span>
-            </div>
-            <div class="route-info">
-              <span>节点{{ selectedFlight.start_node_id }} → 节点{{ selectedFlight.end_node_id }}</span>
+            <div class="alt-tags">
+              <span>{{ selectedFlight.aircraft_type }}</span>
+              <span :class="selectedFlight.operation">{{ selectedFlight.operation==='departure'?'离港':'进港' }}</span>
             </div>
           </div>
-
-          <!-- 取消预览按钮 -->
-          <div v-if="isPreviewingPath" class="preview-controls">
-            <button @click="cancelPreview" class="cancel-preview-btn">
-              ✕ 取消预览
-            </button>
-          </div>
-
-          <div v-if="loadingAlternatives" class="loading">
-            <div class="spinner"></div>
-            <p>正在查找备选路径...</p>
-          </div>
-
-          <div v-else-if="pathAlternatives.length > 0" class="alternatives-list">
-            <div
-              v-for="alt in pathAlternatives"
-              :key="alt.path_id"
-              class="alternative-card"
-              :class="{
-                'active': alt.path_id === activePathId,
-                'recommended': alt.rank === 1
-              }"
-            >
-              <div class="alt-header">
-                <div class="alt-rank">
-                  <input
-                    type="radio"
-                    :id="alt.path_id"
-                    :value="alt.path_id"
-                    v-model="activePathId"
-                    @change="selectAlternativePath(alt)"
-                  />
-                  <label :for="alt.path_id">
-                    路径 {{ alt.rank }}
-                    <span v-if="alt.rank === 1" class="badge recommended">推荐</span>
-                    <span v-if="alt.differences_from_best.distance > 0" class="badge detour">
-                      +{{ (alt.differences_from_best.distance).toFixed(0) }}m
-                    </span>
-                  </label>
-                </div>
-              </div>
-
-              <div class="alt-stats">
-                <div class="stat-row">
-                  <span class="stat-label">📏 距离:</span>
-                  <span class="stat-value">{{ (alt.distance / 1000).toFixed(2) }} km</span>
-                </div>
-                <div class="stat-row">
-                  <span class="stat-label">⏱️ 时间:</span>
-                  <span class="stat-value">{{ (alt.time / 60).toFixed(1) }} min</span>
-                </div>
-                <div class="stat-row">
-                  <span class="stat-label">🛢️ 节点数:</span>
-                  <span class="stat-value">{{ alt.num_nodes }}</span>
-                </div>
-              </div>
-
+          <div v-if="loadingAlternatives" class="loading"><div class="spinner"></div><p>查找中...</p></div>
+          <div v-else-if="pathAlternatives.length" class="alt-list">
+            <div v-for="alt in pathAlternatives" :key="alt.path_id" class="alt-card" :class="{ active: alt.path_id === activePathId }">
+              <div class="alt-rank">路径 {{ alt.rank }} <span v-if="alt.is_original" class="tag">当前</span></div>
+              <div class="alt-stat">📏 {{ (alt.distance/1000).toFixed(2) }} km | ⏱ {{ (alt.time/60).toFixed(1) }} min</div>
               <div class="alt-actions">
-                <button
-                  v-if="!(isPreviewingPath && previewPathData && previewPathData.path_id === alt.path_id)"
-                  @click="previewPath(alt)"
-                  class="preview-btn"
-                  :disabled="alt.path_id === activePathId"
-                >
-                  👁️ 预览
-                </button>
-                <button
-                  v-else
-                  @click="cancelPreview"
-                  class="cancel-preview-btn"
-                >
-                  ✕ 取消预览
-                </button>
-                <button
-                  @click="applyAlternativePath(alt)"
-                  class="apply-btn"
-                  :disabled="alt.path_id === activePathId"
-                >
-                  ✓ 使用此路径
-                </button>
+                <button @click="previewPath(alt)" :disabled="alt.path_id===activePathId">预览</button>
+                <button class="primary" @click="applyAlternativePath(alt)" :disabled="alt.path_id===activePathId">应用</button>
               </div>
             </div>
-          </div>
-
-          <div v-else-if="!loadingAlternatives && pathAlternatives.length === 0" class="no-alternatives">
-            <p>未找到备选路径</p>
           </div>
         </div>
       </div>
@@ -672,7 +408,6 @@
 <script>
 import axios from 'axios';
 import NetworkVisualization from './NetworkVisualization.vue';
-import AlgorithmDetails from './AlgorithmDetails.vue';
 import * as XLSX from 'xlsx';
 import { ElMessage } from 'element-plus';
 
@@ -681,8 +416,13 @@ const API_BASE = 'http://localhost:5001/api';
 export default {
   name: 'AStarAlgorithm',
   components: {
-    NetworkVisualization,
-    AlgorithmDetails
+    NetworkVisualization
+  },
+  mounted() {
+    this.startTimer();
+  },
+  beforeUnmount() {
+    if (this.timeTimer) clearInterval(this.timeTimer);
   },
   data() {
     return {
@@ -760,6 +500,15 @@ export default {
       weightAdjustmentMode: 'auto', // 'auto' 或 'manual'
       peakThreshold: 0.6, // 高峰期阈值（密度百分比）
       timeWindowSize: 30, // 时间窗口大小（分钟）
+
+      // Dashboard additions
+      currentTime: '',
+      computeTime: 0,
+      showUploadModal: false,
+      showSettingsPanel: false,
+      systemStatus: 'online',
+      timeTimer: null,
+      startTime: null,
     }
   },
   computed: {
@@ -805,8 +554,23 @@ export default {
       });
 
       return Array.from(conflictMap.values());
-    }
+    },
+    pieStyle() {
+      const stats = this.getOperationStats();
+      if (!stats.length) return {};
+      const total = stats.reduce((s, i) => s + i.value, 0);
+      if (total === 0) return {};
+      let grad = [];
+      let acc = 0;
+      stats.forEach(s => {
+        const pct = (s.value / total) * 100;
+        grad.push(`${s.color} ${acc}% ${acc + pct}%`);
+        acc += pct;
+      });
+      return { background: `conic-gradient(${grad.join(', ')})` };
+    },
   },
+
   methods: {
     goBack() {
       this.$router.push('/');
@@ -819,6 +583,12 @@ export default {
           if (this.$refs.networkViz && this.nodes.length > 0) {
             this.$refs.networkViz.setNodes(this.nodes);
             this.$refs.networkViz.setEdges(this.edges);
+          }
+        });
+      } else if (tab === 'multi') {
+        this.$nextTick(() => {
+          if (this.multiNodesLoaded) {
+            this.drawMultiAircraftPaths();
           }
         });
       }
@@ -2153,1883 +1923,569 @@ export default {
     },
 
     // 更新权重参数
+
+    // Dashboard helpers
+    updateCurrentTime() {
+      const now = new Date();
+      this.currentTime = now.toLocaleString('zh-CN', {
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit'
+      });
+    },
+    startTimer() {
+      this.updateCurrentTime();
+      this.timeTimer = setInterval(() => {
+        this.updateCurrentTime();
+      }, 1000);
+    },
+    getSystemStatusText() {
+      if (this.isScheduling) return '计算中';
+      if (this.allConflicts.length > 0) return '有冲突';
+      return '运行正常';
+    },
+    getSystemStatusClass() {
+      if (this.isScheduling) return 'busy';
+      if (this.allConflicts.length > 0) return 'warning';
+      return 'online';
+    },
+    // Override scheduleFlights to track compute time
+    async scheduleFlightsTracked() {
+      const start = performance.now();
+      await this.scheduleFlights();
+      this.computeTime = Math.round(performance.now() - start);
+    },
+    // Pie chart data helpers
+    getOperationStats() {
+      if (!this.flights.length) return [];
+      const dep = this.flights.filter(f => f.operation === 'departure').length;
+      const arr = this.flights.filter(f => f.operation === 'arrival').length;
+      return [
+        { label: '离港', value: dep, color: '#4facfe' },
+        { label: '进港', value: arr, color: '#00f2fe' }
+      ];
+    },
+    getConflictSeverityStats() {
+      if (!this.allConflicts.length) return [];
+      const high = this.allConflicts.filter(c => c.severity === 'high').length;
+      const medium = this.allConflicts.filter(c => c.severity === 'medium').length;
+      return [
+        { label: '高危', value: high, color: '#f44336' },
+        { label: '中危', value: medium, color: '#ff9800' }
+      ];
+    },
+    getAircraftTypeStats() {
+      if (!this.flights.length) return [];
+      const map = {};
+      this.flights.forEach(f => {
+        map[f.aircraft_type] = (map[f.aircraft_type] || 0) + 1;
+      });
+      return Object.entries(map).map(([k, v]) => ({ label: k, value: v })).sort((a, b) => b.value - a.value);
+    },
     updateWeightParams() {
       this.analyzeFlightDensity();
     }
   }
 }
 </script>
-
 <style scoped>
-.algorithm-detail {
-  position: relative;
-  padding: 2rem 0;
-  min-height: calc(100vh - 200px);
-  overflow-x: hidden;
-}
-
-.grid-background {
+/* ========== Base & Background ========== */
+.dashboard {
   position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-image:
-    linear-gradient(rgba(64, 224, 255, 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(64, 224, 255, 0.08) 1px, transparent 1px);
-  background-size: 40px 40px;
-  z-index: -2;
-}
-
-.particles {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: -1;
-}
-
-.particles::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background:
-    radial-gradient(circle at 10% 20%, rgba(135, 206, 250, 0.05) 0%, transparent 20%),
-    radial-gradient(circle at 90% 80%, rgba(135, 206, 250, 0.05) 0%, transparent 20%),
-    radial-gradient(circle at 50% 50%, rgba(135, 206, 250, 0.03) 0%, transparent 15%);
-  animation: float 15s infinite linear;
-}
-
-@keyframes float {
-  0% { transform: translate(0, 0); }
-  25% { transform: translate(5px, 5px); }
-  50% { transform: translate(0, 5px); }
-  75% { transform: translate(-5px, 0); }
-  100% { transform: translate(0, 0); }
-}
-
-.container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0 20px;
-  position: relative;
-  z-index: 1;
-}
-
-.algorithm-title {
-  font-size: 2rem;
-  text-align: center;
-  margin-bottom: 2rem;
-  background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
-  background-clip: text;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-.algorithm-content {
-  background: rgba(20, 30, 60, 0.6);
-  border-radius: 10px;
-  padding: 2rem;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(64, 224, 255, 0.2);
-  backdrop-filter: blur(5px);
-}
-
-.intro-section, .features-section, .application-section, .visualization-section {
-  margin-bottom: 2rem;
-  padding: 1.5rem;
-  background: rgba(30, 40, 70, 0.4);
-  border-radius: 8px;
-}
-
-.intro-section h3, .features-section h3, .application-section h3, .visualization-section h3 {
-  font-size: 1.4rem;
-  margin-bottom: 1rem;
-  color: #4facfe;
-}
-
-.intro-section p, .features-section ul, .application-section ul {
-  color: #a0b3c6;
-  line-height: 1.6;
-}
-
-.features-section li, .application-section li {
-  margin: 0.5rem 0;
-  padding-left: 1rem;
-}
-
-/* 主Tab样式 */
-.main-tab-container {
-  margin-bottom: 2rem;
-}
-
-.main-tab-buttons {
-  display: flex;
-  gap: 1rem;
-  justify-content: center;
-}
-
-.main-tab-btn {
-  padding: 1rem 2.5rem;
-  background: rgba(30, 40, 70, 0.6);
-  color: #a0b3c6;
-  border: 2px solid rgba(64, 224, 255, 0.3);
-  border-radius: 10px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  font-size: 1.1rem;
-  font-weight: 500;
-  display: flex;
-  align-items: center;
-  gap: 0.8rem;
-}
-
-.main-tab-btn:hover {
-  background: rgba(40, 50, 80, 0.8);
-  border-color: rgba(64, 224, 255, 0.5);
-  transform: translateY(-2px);
-}
-
-.main-tab-btn.active {
-  background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
-  color: white;
-  border-color: transparent;
-  box-shadow: 0 4px 12px rgba(79, 172, 254, 0.4);
-}
-
-.main-tab-icon {
-  font-size: 1.3rem;
-}
-
-/* Tab 样式 */
-.tab-container {
-  background: rgba(10, 20, 40, 0.5);
-  border-radius: 8px;
-  padding: 1rem;
-}
-
-.tab-buttons {
-  display: flex;
-  gap: 1rem;
-  margin-bottom: 1.5rem;
-  justify-content: center;
-}
-
-.tab-btn {
-  padding: 0.8rem 2rem;
-  background: rgba(30, 40, 70, 0.6);
-  color: #a0b3c6;
-  border: 2px solid rgba(64, 224, 255, 0.3);
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  font-size: 1rem;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.tab-btn:hover {
-  background: rgba(40, 50, 80, 0.8);
-  border-color: rgba(64, 224, 255, 0.5);
-}
-
-.tab-btn.active {
-  background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
-  color: white;
-  border-color: transparent;
-  box-shadow: 0 4px 12px rgba(79, 172, 254, 0.4);
-}
-
-.tab-icon {
-  font-size: 1.2rem;
-}
-
-.tab-panel {
-  animation: fadeIn 0.3s ease;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-/* 上传区域样式 */
-.upload-section {
-  background: rgba(20, 30, 60, 0.6);
-  border-radius: 8px;
-  padding: 1.5rem;
-  margin-bottom: 1.5rem;
-  border: 1px solid rgba(64, 224, 255, 0.3);
-}
-
-.upload-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1rem;
-  flex-wrap: wrap;
-  gap: 1rem;
-}
-
-.upload-header h4 {
-  color: #4facfe;
-  margin: 0;
-  font-size: 1.2rem;
-}
-
-.source-tabs {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.source-tab {
-  padding: 0.5rem 1rem;
-  background: rgba(30, 40, 70, 0.6);
-  color: #a0b3c6;
-  border: 1px solid rgba(64, 224, 255, 0.3);
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  font-size: 0.9rem;
-}
-
-.source-tab:hover {
-  background: rgba(40, 50, 80, 0.8);
-  border-color: rgba(64, 224, 255, 0.5);
-}
-
-.source-tab.active {
-  background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
-  color: white;
-  border-color: transparent;
-}
-
-.source-content {
-  animation: fadeIn 0.3s ease;
-}
-
-/* 格式提示 */
-.format-hint {
-  background: rgba(10, 20, 40, 0.5);
-  border-radius: 6px;
-  padding: 1rem;
-  margin-bottom: 1rem;
-  border: 1px solid rgba(79, 172, 254, 0.2);
-}
-
-.format-hint h5 {
-  color: #4facfe;
-  margin: 0 0 0.5rem 0;
-  font-size: 1rem;
-}
-
-.format-hint p {
-  color: #a0b3c6;
-  margin: 0.5rem 0;
-  font-size: 0.9rem;
-}
-
-.format-table {
+  top: 0; left: 0;
+  width: 100vw; height: 100vh;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  margin-top: 0.8rem;
-}
-
-.format-row {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  padding: 0.4rem 0.8rem;
-  background: rgba(30, 40, 70, 0.4);
-  border-radius: 4px;
-}
-
-.format-column {
-  color: #4facfe;
-  font-family: 'Courier New', monospace;
-  font-weight: 600;
-  min-width: 140px;
-  font-size: 0.85rem;
-}
-
-.format-desc {
-  color: #a0b3c6;
-  font-size: 0.85rem;
-}
-
-/* 上传区域 */
-.upload-area {
-  display: flex;
-  gap: 1rem;
-  align-items: center;
-  flex-wrap: wrap;
-  padding: 1rem;
-  background: rgba(30, 40, 70, 0.4);
-  border-radius: 6px;
-}
-
-.upload-controls {
-  display: flex;
-  gap: 1rem;
-  align-items: center;
-  flex: 1;
-}
-
-.upload-btn {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-}
-
-.upload-btn:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-}
-
-.file-name {
-  color: #4ade80;
-  font-size: 0.9rem;
-  padding: 0.5rem 1rem;
-  background: rgba(74, 222, 128, 0.1);
-  border-radius: 4px;
-  border: 1px solid rgba(74, 222, 128, 0.3);
-}
-
-.extract-btn {
-  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-}
-
-.error-message-old {
-  margin-top: 1rem;
-  padding: 0.8rem 1rem;
-  background: rgba(248, 113, 113, 0.1);
-  border: 1px solid rgba(248, 113, 113, 0.5);
-  border-radius: 6px;
-  color: #f87171;
-  font-size: 0.9rem;
-  white-space: pre-line;
-}
-
-/* 多航班控制面板 */
-.multi-controls {
-  display: flex;
-  gap: 1rem;
-  align-items: flex-start;
-  flex-wrap: wrap;
-  padding: 1rem;
-  background: rgba(20, 30, 60, 0.6);
-  border-radius: 8px;
-  margin-bottom: 1.5rem;
-}
-
-.control-group {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.control-group.has-error {
-  align-items: flex-start;
-}
-
-/* 航班输入组 - 块级布局 */
-.flight-input-wrapper-old {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.5rem;
-}
-
-.flight-input-wrapper-old .input-label {
-  color: #a0b3c6;
-  font-weight: 500;
-  line-height: 36px;
-  white-space: nowrap;
-}
-
-.input-with-error-old {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-}
-
-.input-line-old {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  height: 36px;
-}
-
-.error-message-old {
-  color: #f87171;
-  font-size: 0.8rem;
-  animation: fadeIn 0.3s ease;
-}
-
-.control-group.flight-input-group {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0;
-}
-
-.control-group.flight-input-group .input-row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  height: 36px;
-}
-
-.control-group.flight-input-group .error-row {
-  color: #f87171;
-  font-size: 0.8rem;
-  margin-top: 0.4rem;
-  margin-left: 5.5rem;
-  animation: fadeIn 0.3s ease;
-}
-
-.control-group label {
-  color: #a0b3c6;
-  font-weight: 500;
-}
-
-.control-group select {
-  padding: 0.5rem 1rem;
-  background: rgba(15, 23, 42, 0.8);
-  border: 1px solid rgba(64, 224, 255, 0.3);
-  border-radius: 6px;
-  color: #e0e0e0;
-  cursor: pointer;
-}
-
-.control-group select:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* 航班数量输入框样式 */
-.control-group input.flight-count-input {
-  width: 180px;
-  padding: 0.5rem 0.8rem;
-  background: rgba(15, 23, 42, 0.8);
-  border: 1px solid rgba(64, 224, 255, 0.3);
-  border-radius: 6px;
-  color: #e0e0e0;
-  font-size: 0.95rem;
-  text-align: center;
-  transition: all 0.3s ease;
-}
-
-.control-group input.flight-count-input:focus {
-  outline: none;
-  border-color: rgba(64, 224, 255, 0.8);
-  box-shadow: 0 0 10px rgba(64, 224, 255, 0.3);
-}
-
-.control-group input.flight-count-input:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* 单位标签 */
-.control-group .unit {
-  margin-left: 0.5rem;
-  color: #a0aec0;
-  font-size: 0.9rem;
-}
-
-/* 错误提示样式 */
-
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(-5px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.action-btn {
-  padding: 0.5rem 1.2rem;
-  border: none;
-  border-radius: 6px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  background: rgba(100, 116, 139, 0.8);
-  color: #ffffff;
-}
-
-.action-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.action-btn.primary {
-  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-}
-
-.action-btn.primary:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(79, 172, 254, 0.4);
-}
-
-.action-btn.danger {
-  background: rgba(239, 68, 68, 0.8);
-}
-
-.btn-icon {
-  font-size: 1rem;
-}
-
-/* 统计卡片 */
-.multi-stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 1rem;
-  margin-bottom: 1.5rem;
-}
-
-.stat-card {
-  background: rgba(30, 40, 70, 0.6);
-  border: 1px solid rgba(64, 224, 255, 0.3);
-  border-radius: 8px;
-  padding: 1rem;
-  text-align: center;
-}
-
-.stat-label {
-  font-size: 0.85rem;
-  color: #a0b3c6;
-  margin-bottom: 0.5rem;
-}
-
-.stat-value {
-  font-size: 1.5rem;
-  font-weight: 600;
-  color: #ffffff;
-}
-
-.stat-value.delay {
-  color: #fbbf24;
-}
-
-.stat-card.has-conflicts .stat-value {
-  color: #f87171;
-}
-
-.stat-card.no-conflicts .stat-value {
-  color: #4ade80;
-}
-
-/* 多航班可视化 */
-.multi-visualization {
-  background: rgba(10, 20, 40, 0.7);
-  border: 1px solid rgba(64, 224, 255, 0.3);
-  border-radius: 8px;
-  padding: 1rem;
-  margin-bottom: 1.5rem;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.multi-canvas {
-  max-width: 100%;
-  height: auto;
-  border: 2px solid rgba(64, 224, 255, 0.5);
-  border-radius: 4px;
+  overflow: hidden;
   background: #0a1428;
-  box-shadow: 0 0 20px rgba(64, 224, 255, 0.3);
-  cursor: grab;
+  color: #e0f7fa;
+  font-family: 'Helvetica Neue', Arial, sans-serif;
+}
+.grid-bg {
+  position: absolute; inset: 0;
+  background-image:
+    linear-gradient(rgba(79,172,254,0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(79,172,254,0.06) 1px, transparent 1px);
+  background-size: 30px 30px;
+  pointer-events: none; z-index: 0;
+}
+.particles-bg {
+  position: absolute; inset: 0;
+  pointer-events: none; z-index: 0;
+}
+.particles-bg::after {
+  content: "";
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(circle at 10% 20%, rgba(79,172,254,0.08) 0%, transparent 25%),
+    radial-gradient(circle at 90% 80%, rgba(0,242,254,0.06) 0%, transparent 25%);
+  animation: float 12s infinite linear;
+}
+@keyframes float {
+  0% { transform: translate(0,0); }
+  25% { transform: translate(4px,4px); }
+  50% { transform: translate(0,4px); }
+  75% { transform: translate(-4px,0); }
+  100% { transform: translate(0,0); }
 }
 
-.multi-canvas:active {
-  cursor: grabbing;
-}
-
-.canvas-controls {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-  margin-top: 1rem;
-  padding: 0.5rem 1rem;
-  background: rgba(20, 30, 60, 0.6);
-  border-radius: 5px;
-  border: 1px solid rgba(64, 224, 255, 0.3);
-}
-
-.zoom-btn {
-  padding: 0.5rem 1rem;
-  background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
-  color: white;
-  border: none;
-  border-radius: 5px;
-  font-size: 0.85rem;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.zoom-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(79, 172, 254, 0.4);
-}
-
-.zoom-level {
-  color: #4facfe;
-  font-size: 0.9rem;
-  margin-left: 0.5rem;
-  padding: 0.5rem;
-  background: rgba(64, 224, 255, 0.1);
-  border-radius: 3px;
-  min-width: 80px;
-  text-align: center;
-}
-
-.canvas-controls-mini {
-  display: flex;
-  gap: 1rem;
-  align-items: center;
-  justify-content: center;
-  margin-top: 0.8rem;
-  padding: 0.5rem 1rem;
-  background: rgba(20, 30, 60, 0.6);
-  border-radius: 5px;
-  border: 1px solid rgba(64, 224, 255, 0.3);
-}
-
-.mini-btn {
-  padding: 0.4rem 0.8rem;
-  background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
-  color: white;
-  border: none;
-  border-radius: 5px;
-  font-size: 0.85rem;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.mini-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(79, 172, 254, 0.4);
-}
-
-.info-text {
-  color: #a0b3c6;
-  font-size: 0.9rem;
-}
-
-.canvas-legend {
-  display: flex;
-  gap: 2rem;
-  justify-content: center;
-  flex-wrap: wrap;
-  margin-top: 1rem;
-  padding: 1rem;
-  background: rgba(0, 20, 40, 0.5);
-  border-radius: 8px;
-  border: 1px solid rgba(79, 172, 254, 0.2);
-}
-
-.legend-section {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.legend-title {
-  color: #4facfe;
-  font-size: 0.85rem;
-  font-weight: bold;
-  margin-bottom: 0.25rem;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.legend-item {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  color: #a0b3c6;
-  font-size: 0.85rem;
-}
-
-.legend-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-}
-
-.legend-dot.standpoint {
-  background: #00bcd4;
-}
-
-.legend-dot.runway {
-  background: #ff9800;
-}
-
-.legend-dot.departure {
-  background: #ff69b4;
-}
-
-.legend-dot.arrival {
-  background: #4facfe;
-}
-
-.legend-dot.conflict {
-  background: rgba(255, 0, 0, 0.6);
-  box-shadow: 0 0 8px rgba(255, 0, 0, 0.8);
-}
-
-.legend-circle-filled {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: #4facfe;
-}
-
-.legend-circle-hollow {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  border: 2px solid #4facfe;
-  background: transparent;
-}
-
-.legend-text {
-  color: #ffffff;
-  font-size: 0.75rem;
-  font-weight: bold;
-  font-family: Arial, sans-serif;
-  background: rgba(79, 172, 254, 0.3);
-  padding: 2px 6px;
-  border-radius: 3px;
-}
-
-/* 航班列表 */
-.flights-list {
-  margin-bottom: 1.5rem;
-}
-
-.flights-list-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1rem;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.flights-list h4 {
-  color: #4facfe;
-  margin: 0;
-}
-
-.flight-controls {
-  display: flex;
-  gap: 0.8rem;
-  align-items: center;
-}
-
-.selected-count {
-  color: #4facfe;
-  font-size: 0.9rem;
-  padding: 0.4rem 0.8rem;
-  background: rgba(79, 172, 254, 0.1);
-  border-radius: 4px;
-  font-weight: 500;
-}
-
-.select-btn {
-  padding: 0.4rem 0.8rem;
-  background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
-  color: white;
-  border: none;
-  border-radius: 5px;
-  font-size: 0.85rem;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.select-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(79, 172, 254, 0.4);
-}
-
-.select-btn.clear {
-  background: rgba(100, 116, 139, 0.8);
-}
-
-.select-btn.clear:hover {
-  box-shadow: 0 2px 8px rgba(100, 116, 139, 0.4);
-}
-
-/* 航班表格容器 */
-.flight-table-container {
-  width: 800px;
-  max-width: 100%;
-  max-height: 300px;
-  overflow: auto;
-  border: 1px solid rgba(64, 224, 255, 0.3);
-  border-radius: 8px;
-  background: rgba(10, 20, 40, 0.5);
-}
-
-/* 航班表格 */
-.flight-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.85rem;
-}
-
-.flight-table thead {
-  position: sticky;
-  top: 0;
-  z-index: 10;
-}
-
-.flight-table th {
-  background: rgba(30, 40, 70, 0.9);
-  color: #4facfe;
-  font-weight: 600;
-  text-align: left;
-  padding: 0.8rem 0.6rem;
-  border-bottom: 2px solid rgba(64, 224, 255, 0.5);
-  white-space: nowrap;
-}
-
-.flight-table th.col-checkbox {
-  width: 40px;
-  text-align: center;
-}
-
-.flight-table th.col-flight-id {
-  width: 80px;
-}
-
-.flight-table th.col-type {
-  width: 60px;
-}
-
-.flight-table th.col-operation {
-  width: 50px;
-}
-
-.flight-table th.col-time {
-  width: 60px;
-}
-
-.flight-table th.col-distance {
-  width: 70px;
-}
-
-.flight-table th.col-delay {
-  width: 70px;
-}
-
-.flight-table th.col-action {
-  width: 90px;
-}
-
-.flight-table tbody tr {
-  background: rgba(20, 30, 60, 0.6);
-  border-bottom: 1px solid rgba(64, 224, 255, 0.2);
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.flight-table tbody tr:hover {
-  background: rgba(30, 40, 70, 0.8);
-  border-color: rgba(64, 224, 255, 0.4);
-}
-
-.flight-table tbody tr.selected {
-  background: rgba(79, 172, 254, 0.15);
-  border-left: 3px solid #4facfe;
-}
-
-.flight-table tbody tr.has-conflict {
-  border-left: 3px solid #f87171;
-}
-
-.flight-table tbody tr.has-delay {
-  border-left: 3px solid #fbbf24;
-}
-
-.flight-table tbody tr.success {
-  border-left: 3px solid #4ade80;
-}
-
-.flight-table td {
-  padding: 0.6rem;
-  color: #e0e0e0;
-  border-bottom: 1px solid rgba(64, 224, 255, 0.1);
-}
-
-.flight-table td.col-checkbox {
-  text-align: center;
-}
-
-.flight-table input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  cursor: pointer;
-  accent-color: #4facfe;
-}
-
-.flight-table input[type="checkbox"]:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-
-.flight-table .col-flight-id {
-  font-weight: 600;
-  color: #ffffff;
-}
-
-.flight-table .col-operation.departure {
-  color: #4facfe;
-}
-
-.flight-table .col-operation.arrival {
-  color: #4ade80;
-}
-
-.flight-table .col-delay.has-delay {
-  color: #fbbf24;
-}
-
-.flight-table .col-distance,
-.flight-table .col-delay {
-  text-align: right;
-  font-family: 'Courier New', monospace;
-}
-
-/* 查看备选路径按钮 */
-.view-alternatives-btn {
-  padding: 0.3rem 0.5rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border: none;
-  border-radius: 4px;
-  font-size: 0.75rem;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  white-space: nowrap;
-}
-
-.view-alternatives-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 3px 10px rgba(102, 126, 234, 0.4);
-}
-
-/* 冲突列表 */
-.conflicts-list {
-  margin-bottom: 1.5rem;
-}
-
-.conflicts-list h4 {
-  color: #f87171;
-  margin-bottom: 1rem;
-}
-
-.conflict-cards {
+/* ========== Header ========== */
+.dash-header {
+  position: relative; z-index: 2;
+  height: 60px;
   display: grid;
-  gap: 0.8rem;
-}
-
-.conflict-card {
-  background: rgba(30, 40, 70, 0.6);
-  border: 1px solid rgba(64, 224, 255, 0.3);
-  border-radius: 8px;
-  padding: 1rem;
-}
-
-.conflict-card.high {
-  border-color: rgba(248, 113, 113, 0.5);
-  background: rgba(248, 113, 113, 0.1);
-}
-
-.conflict-card.medium {
-  border-color: rgba(251, 191, 36, 0.5);
-}
-
-.conflict-header {
-  display: flex;
-  justify-content: space-between;
+  grid-template-columns: 280px 1fr 280px;
   align-items: center;
-  margin-bottom: 0.5rem;
-}
-
-.conflict-type {
-  font-weight: 600;
-  color: #ffffff;
-}
-
-.conflict-severity {
-  padding: 0.2rem 0.6rem;
-  border-radius: 4px;
-  font-size: 0.75rem;
-  text-transform: uppercase;
-}
-
-.conflict-card.high .conflict-severity {
-  background: rgba(248, 113, 113, 0.3);
-  color: #f87171;
-}
-
-.conflict-card.medium .conflict-severity {
-  background: rgba(251, 191, 36, 0.3);
-  color: #fbbf24;
-}
-
-.conflict-info {
-  color: #a0b3c6;
-  font-size: 0.85rem;
-}
-
-.back-btn {
-  display: block;
-  margin: 1.5rem auto;
-  padding: 0.8rem 2rem;
-  background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
-  color: white;
-  border: none;
-  border-radius: 50px;
-  font-size: 1rem;
-  font-weight: bold;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.back-btn:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 5px 15px rgba(79, 172, 254, 0.4);
-}
-
-@media (max-width: 768px) {
-  .algorithm-title {
-    font-size: 1.5rem;
-  }
-
-  .algorithm-content {
-    padding: 1rem;
-  }
-
-  .tab-buttons {
-    flex-direction: column;
-  }
-
-  .main-tab-buttons {
-    flex-direction: column;
-  }
-
-  .main-tab-btn {
-    padding: 0.8rem 1.5rem;
-    font-size: 1rem;
-  }
-
-  .multi-controls {
-    flex-direction: column;
-  }
-
-  .multi-stats {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .flight-table-container {
-    width: 100%;
-    max-height: 300px;
-  }
-
-  .flight-table {
-    font-size: 0.75rem;
-  }
-
-  .flight-table th,
-  .flight-table td {
-    padding: 0.4rem 0.3rem;
-  }
-
-  .path-alternatives-sidebar {
-    width: 100%;
-    max-height: 50vh;
-    top: auto;
-    bottom: 0;
-    transform: none;
-    border-radius: 12px 12px 0 0;
-    border-left: none;
-    border-top: 1px solid rgba(64, 224, 255, 0.3);
-  }
-
-  .slide-enter-from,
-  .slide-leave-to {
-    transform: translateY(100%);
-  }
-}
-
-/* 备选路径侧边栏 */
-.path-alternatives-sidebar {
-  position: fixed;
-  top: 50%;
-  right: 0;
-  transform: translateY(-50%);
-  width: 300px;
-  max-height: 70vh;
-  background: rgba(20, 30, 60, 0.95);
-  border-left: 1px solid rgba(64, 224, 255, 0.3);
-  border-radius: 12px 0 0 12px;
+  padding: 0 20px;
+  background: rgba(10,20,40,0.85);
   backdrop-filter: blur(10px);
-  z-index: 1000;
-  display: flex;
-  flex-direction: column;
-  box-shadow: -5px 0 20px rgba(0, 0, 0, 0.3);
+  border-bottom: 1px solid rgba(79,172,254,0.25);
+  box-shadow: 0 0 20px rgba(79,172,254,0.15);
+}
+.header-left { display: flex; align-items: center; gap: 12px; }
+.logo { font-size: 28px; filter: drop-shadow(0 0 8px rgba(79,172,254,0.6)); }
+.main-title {
+  font-size: 20px; font-weight: 700; margin: 0;
+  background: linear-gradient(90deg, #4facfe, #00f2fe);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  text-shadow: 0 0 12px rgba(79,172,254,0.4);
+}
+.sub-title { font-size: 11px; color: #8aa; margin: 2px 0 0; }
+.header-center { display: flex; justify-content: center; }
+.kpi-bar {
+  display: flex; gap: 24px;
+  background: rgba(0,0,0,0.25);
+  border: 1px solid rgba(79,172,254,0.2);
+  border-radius: 8px; padding: 6px 18px;
+}
+.kpi-item { text-align: center; }
+.kpi-label { display: block; font-size: 11px; color: #8aa; }
+.kpi-value {
+  display: block; font-size: 22px; font-weight: 700; color: #4facfe;
+  font-family: 'Courier New', monospace;
+  text-shadow: 0 0 10px rgba(79,172,254,0.5);
+}
+.kpi-value small { font-size: 11px; color: #8aa; margin-left: 2px; }
+.kpi-value.danger { color: #ff4d4f; text-shadow: 0 0 10px rgba(255,77,79,0.5); }
+.header-right { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
+.live-badge {
+  display: flex; align-items: center; gap: 6px;
+  background: rgba(0,0,0,0.3); border-radius: 20px; padding: 4px 10px;
+  font-size: 11px; font-weight: 700; color: #4ade80;
+  border: 1px solid rgba(74,222,128,0.3);
+}
+.live-dot {
+  width: 8px; height: 8px; border-radius: 50%; background: #4ade80;
+  box-shadow: 0 0 8px #4ade80;
+  animation: blink 1.5s infinite;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+.clock { font-size: 13px; color: #c0d8e8; font-family: monospace; }
+.sys-status { font-size: 11px; padding: 3px 10px; border-radius: 4px; font-weight: 600; }
+.sys-status.online { background: rgba(74,222,128,0.15); color: #4ade80; border: 1px solid rgba(74,222,128,0.3); }
+.sys-status.busy { background: rgba(79,172,254,0.15); color: #4facfe; border: 1px solid rgba(79,172,254,0.3); animation: pulse 1.2s infinite; }
+.sys-status.warning { background: rgba(255,152,0,0.15); color: #ff9800; border: 1px solid rgba(255,152,0,0.3); }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.6} }
+
+/* ========== Tab Bar ========== */
+.tab-bar {
+  position: relative; z-index: 2;
+  height: 40px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(10,20,40,0.7);
+  border-bottom: 1px solid rgba(79,172,254,0.15);
+}
+.tab-pills {
+  display: flex; gap: 8px;
+  background: rgba(0,0,0,0.3); padding: 4px; border-radius: 20px;
+  border: 1px solid rgba(79,172,254,0.15);
+}
+.tab-pills button {
+  padding: 5px 20px; border: none; border-radius: 16px;
+  background: transparent; color: #8aa; font-size: 13px; cursor: pointer;
+  transition: all .3s;
+}
+.tab-pills button:hover { color: #e0f7fa; }
+.tab-pills button.active {
+  background: linear-gradient(90deg, #4facfe, #00f2fe);
+  color: #fff; font-weight: 600;
+  box-shadow: 0 0 12px rgba(79,172,254,0.4);
 }
 
-.sidebar-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 1rem;
-  border-bottom: 1px solid rgba(64, 224, 255, 0.3);
-  background: rgba(30, 40, 70, 0.5);
-}
-
-.sidebar-header h3 {
-  color: #4facfe;
-  margin: 0;
-  font-size: 1.1rem;
-}
-
-.close-btn {
-  background: none;
-  border: none;
-  color: #a0b3c6;
-  font-size: 1.5rem;
-  cursor: pointer;
-  line-height: 1;
-  padding: 0;
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 4px;
-  transition: all 0.3s ease;
-}
-
-.close-btn:hover {
-  background: rgba(248, 113, 113, 0.2);
-  color: #f87171;
-}
-
-.sidebar-content {
+/* ========== Main Grid ========== */
+.main-grid {
+  position: relative; z-index: 1;
   flex: 1;
-  overflow-y: auto;
-  padding: 1rem;
+  display: grid;
+  grid-template-columns: 18% 1fr 18%;
+  gap: 10px;
+  padding: 10px;
+  min-height: 0;
 }
+.sidebar, .center-area { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+.sidebar.left { padding-right: 0; }
+.sidebar.right { padding-left: 0; }
 
-.selected-flight-info {
-  margin-bottom: 1rem;
-  padding: 0.8rem;
-  background: rgba(30, 40, 70, 0.6);
-  border-radius: 8px;
-  border: 1px solid rgba(64, 224, 255, 0.3);
+/* ========== Panel ========== */
+.panel {
+  background: rgba(13,27,42,0.7);
+  border: 1px solid rgba(79,172,254,0.2);
+  border-radius: 10px;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 0 20px rgba(79,172,254,0.08);
+  display: flex; flex-direction: column;
+  overflow: hidden;
 }
-
-.selected-flight-info h4 {
-  color: #4facfe;
-  margin: 0 0 0.6rem 0;
-  font-size: 1rem;
+.panel-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 12px;
+  background: rgba(79,172,254,0.08);
+  border-bottom: 1px solid rgba(79,172,254,0.15);
 }
-
-.flight-details {
-  display: flex;
-  gap: 0.4rem;
-  margin-bottom: 0.4rem;
-  flex-wrap: wrap;
+.panel-title {
+  font-size: 13px; font-weight: 700; color: #4facfe;
+  letter-spacing: 1px;
 }
-
-.detail-item {
-  padding: 0.2rem 0.5rem;
-  background: rgba(64, 224, 255, 0.1);
-  border-radius: 4px;
-  font-size: 0.75rem;
-  color: #4facfe;
-}
-
-.route-info {
-  color: #a0b3c6;
-  font-size: 0.8rem;
-}
-
-.preview-controls {
-  padding: 0.6rem 0.8rem;
-  margin-bottom: 0.8rem;
-  background: rgba(248, 113, 113, 0.1);
-  border: 1px solid rgba(248, 113, 113, 0.3);
-  border-radius: 6px;
-  text-align: center;
-}
-
-.cancel-preview-btn {
-  padding: 0.4rem 0.8rem;
-  background: rgba(248, 113, 113, 0.8);
-  color: white;
-  border: none;
-  border-radius: 5px;
-  font-size: 0.8rem;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  width: 100%;
-}
-
-.cancel-preview-btn:hover {
-  background: rgba(248, 113, 113, 1);
-  transform: translateY(-1px);
-  box-shadow: 0 3px 10px rgba(248, 113, 113, 0.4);
-}
-
-.loading {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 2rem 1rem;
-  color: #a0b3c6;
-  font-size: 0.85rem;
-}
-
-.spinner {
-  width: 30px;
-  height: 30px;
-  border: 3px solid rgba(79, 172, 254, 0.3);
-  border-top-color: #4facfe;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin-bottom: 0.8rem;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-.alternatives-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.8rem;
-}
-
-.alternative-card {
-  background: rgba(30, 40, 70, 0.6);
-  border: 2px solid rgba(64, 224, 255, 0.3);
-  border-radius: 8px;
-  padding: 0.8rem;
-  transition: all 0.3s ease;
-  cursor: pointer;
-}
-
-.alternative-card:hover {
-  border-color: rgba(64, 224, 255, 0.5);
-  background: rgba(30, 40, 70, 0.8);
-}
-
-.alternative-card.active {
-  border-color: #4facfe;
-  background: rgba(79, 172, 254, 0.15);
-  box-shadow: 0 0 15px rgba(79, 172, 254, 0.3);
-}
-
-.alternative-card.recommended {
-  border-color: rgba(74, 222, 128, 0.5);
-}
-
-.alt-header {
-  margin-bottom: 0.6rem;
-}
-
-.alt-rank {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-
-.alt-rank input[type="radio"] {
-  width: 16px;
-  height: 16px;
-  cursor: pointer;
-  accent-color: #4facfe;
-}
-
-.alt-rank label {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-weight: 500;
-  font-size: 0.85rem;
-  color: #ffffff;
-  cursor: pointer;
-}
-
-.badge {
-  padding: 0.15rem 0.4rem;
-  border-radius: 4px;
-  font-size: 0.7rem;
-  font-weight: 600;
-}
-
-.badge.recommended {
-  background: rgba(74, 222, 128, 0.2);
-  color: #4ade80;
-  border: 1px solid rgba(74, 222, 128, 0.5);
-}
-
-.badge.detour {
-  background: rgba(251, 191, 36, 0.2);
-  color: #fbbf24;
-  border: 1px solid rgba(251, 191, 36, 0.5);
-}
-
-.alt-stats {
-  margin-bottom: 0.6rem;
-}
-
-.stat-row {
-  display: flex;
-  justify-content: space-between;
-  padding: 0.3rem 0;
-  font-size: 0.8rem;
-}
-
-.stat-label {
-  color: #a0b3c6;
-}
-
-.stat-value {
-  color: #ffffff;
-  font-weight: 500;
-}
-
-.alt-actions {
-  display: flex;
-  gap: 0.4rem;
-}
-
-.preview-btn,
-.apply-btn {
+.panel-body {
+  padding: 10px;
   flex: 1;
-  padding: 0.4rem 0.6rem;
-  border: none;
-  border-radius: 6px;
-  font-size: 0.75rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.3s ease;
+  overflow: auto;
 }
+.panel-body.compact { padding: 8px; }
+.panel-body.center { display: flex; align-items: center; justify-content: center; }
 
-.preview-btn {
-  background: rgba(100, 116, 139, 0.8);
-  color: #ffffff;
+/* Alarm panel specific */
+.alarm-panel { flex: 1.5; }
+.alarm-badge {
+  font-size: 11px; padding: 2px 8px; border-radius: 10px; background: rgba(74,222,128,0.2); color: #4ade80;
 }
-
-.preview-btn:hover:not(:disabled) {
-  background: rgba(100, 116, 139, 1);
-  transform: translateY(-1px);
+.alarm-badge.danger { background: rgba(255,77,79,0.2); color: #ff4d4f; }
+.alarm-list { display: flex; flex-direction: column; gap: 6px; }
+.alarm-card {
+  padding: 8px; border-radius: 6px;
+  background: rgba(255,255,255,0.03);
+  border-left: 3px solid rgba(79,172,254,0.4);
+  font-size: 11px;
 }
+.alarm-card.high { border-left-color: #f44336; background: rgba(244,67,54,0.08); }
+.alarm-card.medium { border-left-color: #ff9800; background: rgba(255,152,0,0.08); }
+.alarm-row { display: flex; justify-content: space-between; margin-bottom: 3px; }
+.alarm-type { font-weight: 700; }
+.alarm-time { color: #8aa; }
+.alarm-flights { color: #c0d8e8; }
+.alarm-node { color: #8aa; }
+.alarm-empty { text-align: center; color: #567; padding: 20px; font-size: 12px; }
 
-.preview-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+/* Stats panel */
+.stats-panel { flex: 1.2; }
+.big-stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.big-stat {
+  text-align: center; padding: 8px 4px;
+  background: rgba(0,0,0,0.2); border-radius: 6px;
+  border: 1px solid rgba(79,172,254,0.1);
 }
-
-.cancel-preview-btn {
-  flex: 1;
-  padding: 0.4rem 0.6rem;
-  border: 1px solid rgba(248, 113, 113, 0.5);
-  border-radius: 6px;
-  background: rgba(248, 113, 113, 0.1);
-  color: #f87171;
-  font-size: 0.75rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.3s ease;
+.big-num {
+  font-size: 20px; font-weight: 700; color: #4facfe;
+  font-family: 'Courier New', monospace;
+  text-shadow: 0 0 10px rgba(79,172,254,0.4);
 }
+.big-num.warn { color: #ff9800; text-shadow: 0 0 10px rgba(255,152,0,0.4); }
+.big-label { font-size: 10px; color: #8aa; margin-top: 3px; }
+.footer-stats { grid-template-columns: repeat(4, 1fr); gap: 10px; padding: 4px 0; }
+.footer-stats .big-stat { padding: 6px 2px; }
+.footer-stats .big-num { font-size: 18px; }
 
-.cancel-preview-btn:hover {
-  background: rgba(248, 113, 113, 0.2);
-  border-color: rgba(248, 113, 113, 0.8);
-  transform: translateY(-1px);
+/* Period badge */
+.period-badge {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px; border-radius: 6px; font-size: 12px;
+  background: rgba(0,0,0,0.2); border: 1px solid rgba(79,172,254,0.15);
 }
+.period-badge .dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: #ff9800; box-shadow: 0 0 8px #ff9800;
+  animation: blink 2s infinite;
+}
+.period-badge.peak .dot { background: #f44336; box-shadow: 0 0 8px #f44336; }
+.period-badge.off-peak .dot { background: #4ade80; box-shadow: 0 0 8px #4ade80; }
+.period-title { font-weight: 700; color: #e0f7fa; }
+.period-sub { font-size: 10px; color: #8aa; }
 
-/* 冲突点悬浮提示 */
+/* Icon controls */
+.icon-row { display: flex; gap: 6px; justify-content: center; }
+.icon-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 8px 6px; flex: 1;
+  background: rgba(79,172,254,0.1); border: 1px solid rgba(79,172,254,0.2);
+  border-radius: 8px; color: #c0d8e8; font-size: 11px; cursor: pointer;
+  transition: all .3s;
+}
+.icon-btn:hover { background: rgba(79,172,254,0.25); border-color: rgba(79,172,254,0.5); transform: translateY(-2px); }
+.icon-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.ico { font-size: 18px; }
+
+/* Settings drawer */
+.settings-drawer { margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(79,172,254,0.15); }
+.field { margin-bottom: 8px; }
+.field label { display: block; font-size: 11px; color: #8aa; margin-bottom: 3px; }
+.field select, .field input {
+  width: 100%; padding: 5px 8px; font-size: 12px;
+  background: rgba(0,0,0,0.3); border: 1px solid rgba(79,172,254,0.3);
+  border-radius: 4px; color: #e0f7fa;
+}
+.field.actions { display: flex; gap: 6px; margin-top: 10px; }
+.btn {
+  padding: 6px 12px; border: none; border-radius: 5px; font-size: 12px; cursor: pointer;
+  background: rgba(100,116,139,0.6); color: #fff; transition: all .3s;
+}
+.btn:hover:not(:disabled) { transform: translateY(-1px); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn.primary { background: linear-gradient(90deg, #4facfe, #00f2fe); }
+.btn.danger { background: rgba(239,68,68,0.8); }
+.err { color: #ff6b6b; font-size: 11px; margin-top: 4px; }
+
+/* ========== Center Map ========== */
+.center-area { flex: 1; }
+.map-panel {
+  flex: 1; display: flex; flex-direction: column;
+  background: rgba(13,27,42,0.7);
+  border: 1px solid rgba(79,172,254,0.25);
+  border-radius: 10px;
+  box-shadow: 0 0 25px rgba(79,172,254,0.12);
+  overflow: hidden;
+}
+.single-map-wrap, .multi-map-wrap { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.canvas-box { flex: 1; position: relative; min-height: 0; }
+.canvas-box canvas {
+  width: 100%; height: 100%;
+  background: #0a1428;
+  display: block;
+}
+.canvas-toolbar {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 10px;
+  background: rgba(0,0,0,0.3);
+  border-top: 1px solid rgba(79,172,254,0.15);
+}
+.canvas-toolbar button {
+  padding: 4px 10px; font-size: 12px;
+  background: rgba(79,172,254,0.15); border: 1px solid rgba(79,172,254,0.3);
+  border-radius: 4px; color: #c0d8e8; cursor: pointer;
+}
+.canvas-toolbar button:hover { background: rgba(79,172,254,0.3); }
+.zoom-txt { font-size: 11px; color: #4facfe; margin-left: auto; font-family: monospace; }
+
+/* Conflict tooltip */
 .conflict-tooltip {
   position: absolute;
-  background: rgba(15, 23, 42, 0.95);
-  border: 1px solid rgba(248, 113, 113, 0.5);
-  border-radius: 8px;
-  padding: 0.8rem 1rem;
-  min-width: 220px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
-  z-index: 10000;
-  pointer-events: none;
-  animation: tooltipFadeIn 0.2s ease;
-}
-
-.conflict-tooltip .tooltip-title {
-  font-weight: 600;
-  color: #f87171;
-  margin-bottom: 0.6rem;
-  padding-bottom: 0.5rem;
-  border-bottom: 1px solid rgba(248, 113, 113, 0.3);
-  font-size: 0.9rem;
-}
-
-@keyframes tooltipFadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(5px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.conflict-tooltip .tooltip-header {
-  font-weight: 600;
-  color: #f87171;
-  margin-bottom: 0.5rem;
-  padding-bottom: 0.4rem;
-  border-bottom: 1px solid rgba(248, 113, 113, 0.3);
-  font-size: 0.9rem;
-}
-
-.conflict-tooltip .tooltip-content {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-}
-
-.conflict-tooltip .tooltip-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 0.85rem;
-}
-
-.conflict-tooltip .tooltip-label {
-  color: #94a3b8;
-  font-weight: 400;
-}
-
-.conflict-tooltip .tooltip-value {
-  color: #ffffff;
-  font-weight: 500;
-}
-
-.apply-btn {
-  background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
-  color: white;
-}
-
-.apply-btn:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(79, 172, 254, 0.4);
-}
-
-.apply-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.no-alternatives {
-  text-align: center;
-  padding: 2rem 1rem;
-  color: #a0b3c6;
-  font-size: 0.85rem;
-}
-
-/* 侧边栏动画 */
-.slide-enter-active,
-.slide-leave-active {
-  transition: all 0.3s ease;
-}
-
-.slide-enter-from,
-.slide-leave-to {
-  transform: translate(100%, -50%);
-  opacity: 0;
-}
-
-/* 滚动条样式 */
-.sidebar-content::-webkit-scrollbar {
-  width: 6px;
-}
-
-.sidebar-content::-webkit-scrollbar-track {
-  background: rgba(20, 30, 60, 0.3);
-  border-radius: 4px;
-}
-
-.sidebar-content::-webkit-scrollbar-thumb {
-  background: rgba(64, 224, 255, 0.3);
-  border-radius: 4px;
-}
-
-.sidebar-content::-webkit-scrollbar-thumb:hover {
-  background: rgba(64, 224, 255, 0.5);
-}
-
-/* 航班表格滚动条样式 */
-.flight-table-container::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-.flight-table-container::-webkit-scrollbar-track {
-  background: rgba(20, 30, 60, 0.3);
-  border-radius: 4px;
-}
-
-.flight-table-container::-webkit-scrollbar-thumb {
-  background: rgba(64, 224, 255, 0.3);
-  border-radius: 4px;
-}
-
-.flight-table-container::-webkit-scrollbar-thumb:hover {
-  background: rgba(64, 224, 255, 0.5);
-}
-
-@media (max-width: 768px) {
-  .path-alternatives-sidebar {
-    width: 100%;
-    right: 0;
-  }
-}
-
-/* 时间段与权重信息样式 */
-.period-weight-section {
-  margin-bottom: 1.5rem;
-  padding: 1.5rem;
-  background: rgba(20, 30, 60, 0.6);
-  border: 1px solid rgba(64, 224, 255, 0.3);
-  border-radius: 8px;
-}
-
-.period-weight-section h4 {
-  color: #4facfe;
-  margin: 0 0 1rem 0;
-  font-size: 1.2rem;
-}
-
-.period-weight-content {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
-
-.period-analysis {
-  background: rgba(30, 40, 70, 0.4);
-  border-radius: 8px;
-  padding: 1rem;
-  border: 1px solid rgba(79, 172, 254, 0.2);
-}
-
-.period-summary {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.period-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0.5rem 0;
-  border-bottom: 1px solid rgba(64, 224, 255, 0.1);
-}
-
-.period-item:last-child {
-  border-bottom: none;
-}
-
-.period-label {
-  color: #a0b3c6;
-  font-size: 0.9rem;
-}
-
-.period-value {
-  color: #ffffff;
-  font-weight: 500;
-  font-size: 0.9rem;
-}
-
-.weight-config {
-  background: rgba(30, 40, 70, 0.4);
-  border-radius: 8px;
-  padding: 1rem;
-  border: 1px solid rgba(79, 172, 254, 0.2);
-}
-
-.weight-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1rem;
-  flex-wrap: wrap;
-  gap: 1rem;
-}
-
-.weight-title {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  color: #4facfe;
-  font-size: 1rem;
-  font-weight: 600;
-}
-
-.weight-mode {
-  color: #a0b3c6;
-  font-size: 0.85rem;
-  font-weight: 400;
-}
-
-.weight-controls {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.weight-btn {
-  padding: 0.4rem 0.8rem;
-  border: none;
-  border-radius: 6px;
-  font-size: 0.85rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.weight-btn.auto {
-  background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
-  color: white;
-}
-
-.weight-btn.auto:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(79, 172, 254, 0.4);
-}
-
-.weight-btn.auto:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.weight-btn.manual {
-  background: rgba(100, 116, 139, 0.8);
-  color: #ffffff;
-}
-
-.weight-btn.manual:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(100, 116, 139, 0.4);
-}
-
-.weight-btn.manual:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.weight-values {
-  display: flex;
-  flex-direction: column;
-  gap: 0.8rem;
-  margin-bottom: 1rem;
-}
-
-.weight-item {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.8rem;
-  background: rgba(15, 23, 42, 0.6);
-  border-radius: 6px;
-  border: 1px solid rgba(64, 224, 255, 0.2);
-}
-
-.weight-label {
-  color: #a0b3c6;
-  font-size: 0.9rem;
-  min-width: 80px;
-}
-
-.weight-value {
-  color: #ffffff;
-  font-weight: 600;
-  font-size: 1.1rem;
-  min-width: 40px;
-  text-align: center;
-}
-
-.weight-desc {
-  color: #4facfe;
-  font-size: 0.85rem;
-  margin-left: auto;
-}
-
-.weight-description {
-  padding: 0.8rem;
-  background: rgba(15, 23, 42, 0.4);
-  border-radius: 6px;
-  border: 1px solid rgba(64, 224, 255, 0.1);
-}
-
-.weight-description p {
-  color: #a0b3c6;
-  font-size: 0.9rem;
-  margin: 0;
-  line-height: 1.5;
-}
-
-/* 当前时段状态指示器 */
-.period-status-indicator {
-  margin: 1rem 0;
-  animation: fadeIn 0.5s ease;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(-10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.period-status-content {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  padding: 1rem 1.5rem;
-  border-radius: 12px;
-  border: 2px solid;
-  transition: all 0.3s ease;
-}
-
-.period-status-content.peak {
-  background: linear-gradient(135deg, rgba(248, 113, 113, 0.15) 0%, rgba(239, 68, 68, 0.1) 100%);
-  border-color: rgba(248, 113, 113, 0.5);
-  box-shadow: 0 4px 15px rgba(248, 113, 113, 0.2);
-}
-
-.period-status-content.off-peak {
-  background: linear-gradient(135deg, rgba(74, 222, 128, 0.15) 0%, rgba(34, 197, 94, 0.1) 100%);
-  border-color: rgba(74, 222, 128, 0.5);
-  box-shadow: 0 4px 15px rgba(74, 222, 128, 0.2);
-}
-
-.period-status-content.normal {
-  background: linear-gradient(135deg, rgba(251, 191, 36, 0.15) 0%, rgba(245, 158, 11, 0.1) 100%);
-  border-color: rgba(251, 191, 36, 0.5);
-  box-shadow: 0 4px 15px rgba(251, 191, 36, 0.2);
-}
-
-.period-status-icon {
-  font-size: 2rem;
-  animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.1); }
-}
-
-.period-status-text {
-  flex: 1;
-}
-
-.period-status-title {
-  font-size: 1.1rem;
-  font-weight: 700;
-  margin-bottom: 0.3rem;
-}
-
-.period-status-content.peak .period-status-title {
-  color: #f87171;
-}
-
-.period-status-content.off-peak .period-status-title {
-  color: #4ade80;
-}
-
-.period-status-content.normal .period-status-title {
-  color: #fbbf24;
-}
-
-.period-status-desc {
-  font-size: 0.9rem;
-  color: #a0b3c6;
-  margin-bottom: 0.5rem;
-}
-
-.period-weights-detail {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  font-size: 0.85rem;
-  color: #cbd5e1;
-}
-
-.period-weights-detail strong {
-  color: #ffffff;
-  font-weight: 600;
-}
-
-.weight-separator {
-  color: #64748b;
-}
-
-.period-indicator {
-  display: inline-block;
-  padding: 0.2rem 0.6rem;
-  border-radius: 4px;
-  font-size: 0.85rem;
-  font-weight: 600;
-  margin-left: 0.5rem;
-}
-
-.period-indicator.peak {
-  background: rgba(248, 113, 113, 0.2);
-  color: #f87171;
-  border: 1px solid rgba(248, 113, 113, 0.5);
-}
-
-.period-indicator.off-peak {
-  background: rgba(74, 222, 128, 0.2);
-  color: #4ade80;
-  border: 1px solid rgba(74, 222, 128, 0.5);
-}
-
-.period-indicator.normal {
-  background: rgba(251, 191, 36, 0.2);
-  color: #fbbf24;
-  border: 1px solid rgba(251, 191, 36, 0.5);
-}
-
-@media (max-width: 768px) {
-  .period-weight-content {
-    flex-direction: column;
-  }
-
-  .period-item {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.3rem;
-  }
-
-  .weight-header {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-}
+  background: rgba(10,15,30,0.95);
+  border: 1px solid rgba(255,77,79,0.5);
+  border-radius: 6px; padding: 8px 10px;
+  min-width: 180px; font-size: 11px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+  pointer-events: none; z-index: 100;
+}
+.tt-title { color: #ff6b6b; font-weight: 700; margin-bottom: 4px; border-bottom: 1px solid rgba(255,77,79,0.2); padding-bottom: 3px; }
+.tt-row { display: flex; justify-content: space-between; color: #c0d8e8; margin: 2px 0; }
+.tt-row b { color: #fff; }
+
+/* ========== Pie Chart ========== */
+.pie-wrap { display: flex; align-items: center; gap: 12px; }
+.pie {
+  width: 56px; height: 56px; border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.1);
+}
+.pie-legend { display: flex; flex-direction: column; gap: 4px; }
+.pie-lv { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #c0d8e8; }
+.pie-lv .dot { width: 8px; height: 8px; border-radius: 50%; }
+
+/* Strategy ring */
+.strategy-ring {
+  width: 70px; height: 70px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto;
+  border: 3px solid rgba(79,172,254,0.3);
+  box-shadow: 0 0 15px rgba(79,172,254,0.2);
+}
+.ring-inner { text-align: center; }
+.ring-label { font-size: 14px; font-weight: 700; color: #4facfe; }
+.ring-sub { font-size: 9px; color: #8aa; }
+
+/* ========== Footer ========== */
+.dash-footer {
+  position: relative; z-index: 2;
+  height: 130px;
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+  padding: 0 10px 10px;
+}
+.footer-card {
+  background: rgba(13,27,42,0.7);
+  border: 1px solid rgba(79,172,254,0.2);
+  border-radius: 10px;
+  backdrop-filter: blur(8px);
+  padding: 10px;
+  display: flex; flex-direction: column;
+  box-shadow: 0 0 15px rgba(79,172,254,0.06);
+}
+.f-title { font-size: 12px; font-weight: 700; color: #4facfe; margin-bottom: 8px; letter-spacing: 1px; }
+
+/* Ring chart */
+.ring-chart-wrap { display: flex; align-items: center; gap: 12px; flex: 1; }
+.ring-chart {
+  width: 56px; height: 56px; border-radius: 50%;
+  display: flex; overflow: hidden;
+  border: 2px solid rgba(255,255,255,0.1);
+  transform: rotate(-90deg);
+}
+.ring-segment { transition: all .3s; }
+.ring-segment.high { background: conic-gradient(from 0deg, #f44336 0deg, #ff6b6b 360deg); }
+.ring-segment.medium { background: conic-gradient(from 0deg, #ff9800 0deg, #ffb74d 360deg); }
+.ring-segment.safe { background: conic-gradient(from 0deg, #4ade80 0deg, #81c784 360deg); }
+.ring-legend-v { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: #c0d8e8; }
+.lg-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+
+/* Bar chart */
+.bar-chart { display: flex; flex-direction: column; gap: 5px; flex: 1; justify-content: center; }
+.bar-row { display: grid; grid-template-columns: 50px 1fr 24px; align-items: center; gap: 6px; font-size: 11px; }
+.bar-label { color: #8aa; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar-track { height: 8px; background: rgba(0,0,0,0.3); border-radius: 4px; overflow: hidden; }
+.bar-fill { height: 100%; background: linear-gradient(90deg, #4facfe, #00f2fe); border-radius: 4px; transition: width .6s ease; }
+.bar-val { color: #c0d8e8; text-align: right; font-family: monospace; }
+.bar-empty { text-align: center; color: #567; font-size: 12px; }
+
+/* Delay overview */
+.delay-overview { display: flex; align-items: center; gap: 14px; flex: 1; }
+.d-circle {
+  width: 56px; height: 56px; border-radius: 50%;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  border: 2px solid rgba(74,222,128,0.4);
+  background: rgba(74,222,128,0.08);
+}
+.d-circle.warn { border-color: rgba(255,152,0,0.4); background: rgba(255,152,0,0.08); }
+.d-num { font-size: 16px; font-weight: 700; color: #4ade80; font-family: monospace; }
+.d-circle.warn .d-num { color: #ff9800; }
+.d-unit { font-size: 9px; color: #8aa; }
+.d-bars { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+.d-row { display: grid; grid-template-columns: 60px 1fr; align-items: center; gap: 6px; font-size: 11px; color: #8aa; }
+.d-track { height: 6px; background: rgba(0,0,0,0.3); border-radius: 3px; overflow: hidden; }
+.d-fill { height: 100%; background: linear-gradient(90deg, #ff9800, #ffc107); border-radius: 3px; }
+.d-fill.blue { background: linear-gradient(90deg, #4facfe, #00f2fe); }
+.d-fill.cyan { background: linear-gradient(90deg, #00bcd4, #00f2fe); }
+
+/* ========== Modal ========== */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 2000;
+  background: rgba(0,0,0,0.6);
+  display: flex; align-items: center; justify-content: center;
+  backdrop-filter: blur(4px);
+}
+.modal-box {
+  width: 420px; max-width: 90vw;
+  background: rgba(13,27,42,0.95);
+  border: 1px solid rgba(79,172,254,0.3);
+  border-radius: 10px;
+  box-shadow: 0 0 30px rgba(79,172,254,0.2);
+  overflow: hidden;
+}
+.modal-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px;
+  background: rgba(79,172,254,0.08);
+  border-bottom: 1px solid rgba(79,172,254,0.15);
+}
+.modal-head h3 { margin: 0; font-size: 14px; color: #4facfe; }
+.modal-close { background: none; border: none; color: #8aa; font-size: 20px; cursor: pointer; }
+.modal-close:hover { color: #fff; }
+.modal-body { padding: 14px; }
+.source-tabs { display: flex; gap: 8px; margin-bottom: 12px; }
+.source-tabs button {
+  flex: 1; padding: 6px; font-size: 12px;
+  background: rgba(0,0,0,0.2); border: 1px solid rgba(79,172,254,0.2);
+  border-radius: 5px; color: #8aa; cursor: pointer;
+}
+.source-tabs button.active { background: rgba(79,172,254,0.2); color: #4facfe; border-color: rgba(79,172,254,0.4); }
+.source-content { font-size: 12px; }
+.source-content label { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.source-content input { flex: 1; padding: 5px; background: rgba(0,0,0,0.2); border: 1px solid rgba(79,172,254,0.2); color: #e0f7fa; border-radius: 4px; }
+.file-tag { color: #4ade80; font-size: 11px; margin: 0 8px; }
+
+/* ========== Alt Sidebar ========== */
+.alt-sidebar {
+  position: fixed; top: 60px; right: 0; bottom: 0; width: 280px; z-index: 1500;
+  background: rgba(10,20,40,0.95);
+  border-left: 1px solid rgba(79,172,254,0.3);
+  backdrop-filter: blur(10px);
+  box-shadow: -5px 0 20px rgba(0,0,0,0.4);
+  display: flex; flex-direction: column;
+}
+.alt-head { display: flex; align-items: center; justify-content: space-between; padding: 12px; border-bottom: 1px solid rgba(79,172,254,0.15); }
+.alt-head h3 { margin: 0; font-size: 14px; color: #4facfe; }
+.alt-body { flex: 1; overflow: auto; padding: 12px; }
+.alt-info { padding: 8px; background: rgba(0,0,0,0.2); border-radius: 6px; margin-bottom: 10px; }
+.alt-info h4 { margin: 0 0 6px; color: #4facfe; }
+.alt-tags { display: flex; gap: 6px; }
+.alt-tags span { font-size: 10px; padding: 2px 8px; border-radius: 4px; background: rgba(79,172,254,0.15); color: #4facfe; }
+.alt-tags span.departure { background: rgba(255,105,180,0.15); color: #ff69b4; }
+.alt-list { display: flex; flex-direction: column; gap: 8px; }
+.alt-card { padding: 10px; border-radius: 6px; border: 1px solid rgba(79,172,254,0.2); background: rgba(0,0,0,0.15); }
+.alt-card.active { border-color: #4facfe; background: rgba(79,172,254,0.1); }
+.alt-rank { font-size: 12px; font-weight: 700; color: #e0f7fa; margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
+.tag { font-size: 9px; padding: 1px 6px; border-radius: 4px; background: rgba(74,222,128,0.2); color: #4ade80; }
+.alt-stat { font-size: 11px; color: #8aa; margin-bottom: 8px; }
+.alt-actions { display: flex; gap: 6px; }
+.alt-actions button { flex: 1; padding: 5px; font-size: 11px; border: none; border-radius: 4px; cursor: pointer; background: rgba(100,116,139,0.5); color: #fff; }
+.alt-actions button.primary { background: linear-gradient(90deg, #4facfe, #00f2fe); }
+.alt-actions button:disabled { opacity: 0.4; cursor: not-allowed; }
+.loading { display: flex; flex-direction: column; align-items: center; padding: 20px; color: #8aa; font-size: 12px; }
+.spinner { width: 24px; height: 24px; border: 2px solid rgba(79,172,254,0.2); border-top-color: #4facfe; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 8px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Slide transition */
+.slide-enter-active, .slide-leave-active { transition: all .3s ease; }
+.slide-enter-from, .slide-leave-to { transform: translateX(100%); opacity: 0; }
+
+/* Flight list */
+.flight-panel { flex: 1.8; }
+.flight-ops { display: flex; align-items: center; gap: 6px; }
+.sel-text { font-size: 10px; color: #8aa; }
+.mini-btn { padding: 2px 8px; font-size: 10px; background: rgba(79,172,254,0.15); border: 1px solid rgba(79,172,254,0.3); border-radius: 4px; color: #4facfe; cursor: pointer; }
+.flight-list { display: flex; flex-direction: column; gap: 6px; }
+.flight-card {
+  padding: 8px; border-radius: 6px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(79,172,254,0.1);
+  border-left: 3px solid rgba(79,172,254,0.4);
+  cursor: pointer; transition: all .2s; font-size: 11px;
+}
+.flight-card:hover { background: rgba(79,172,254,0.08); border-color: rgba(79,172,254,0.3); }
+.flight-card.selected { background: rgba(79,172,254,0.12); border-left-color: #4facfe; }
+.flight-card.has-conflict { border-left-color: #f44336; background: rgba(244,67,54,0.06); }
+.flight-card.has-delay { border-left-color: #ff9800; background: rgba(255,152,0,0.05); }
+.flight-card.success { border-left-color: #4ade80; }
+.flight-main { display: flex; align-items: flex-start; gap: 8px; }
+.fc-check { width: 14px; height: 14px; margin-top: 2px; accent-color: #4facfe; cursor: pointer; }
+.flight-info { flex: 1; min-width: 0; }
+.flight-top { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 4px; }
+.fid { font-weight: 700; color: #fff; font-size: 12px; }
+.ftype { font-size: 10px; color: #8aa; background: rgba(0,0,0,0.3); padding: 1px 6px; border-radius: 4px; }
+.fop { font-size: 10px; padding: 1px 6px; border-radius: 4px; font-weight: 600; }
+.fop.departure { background: rgba(79,172,254,0.15); color: #4facfe; }
+.fop.arrival { background: rgba(0,242,254,0.15); color: #00f2fe; }
+.flight-mid { display: flex; gap: 8px; flex-wrap: wrap; color: #8aa; font-size: 10px; }
+.flight-mid .warn { color: #ff9800; }
+.flight-actions { margin-top: 6px; display: flex; justify-content: flex-end; }
+.alt-btn { padding: 3px 10px; font-size: 10px; border: none; border-radius: 4px; cursor: pointer; transition: all .2s; }
+.alt-btn.danger { background: rgba(244,67,54,0.2); color: #ff6b6b; border: 1px solid rgba(244,67,54,0.3); }
+.alt-btn.danger:hover { background: rgba(244,67,54,0.35); transform: translateY(-1px); }
+.alt-btn.safe { background: rgba(74,222,128,0.1); color: #4ade80; border: 1px solid rgba(74,222,128,0.2); cursor: default; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(79,172,254,0.2); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(79,172,254,0.4); }
+
+/* NetworkVisualization deep adjustments */
+.single-map-wrap { height: 100%; }
+.single-map-wrap :deep(.network-visualization) { height: 100%; }
+.single-map-wrap :deep(.path-stats) { display: none; }
 </style>
