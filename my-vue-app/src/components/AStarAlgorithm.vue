@@ -2080,7 +2080,7 @@ export default {
 }
 @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
 .clock { font-size: 13px; color: #c0d8e8; font-family: monospace; }
-.sys-status { font-size: 11px; padding: 3px 10px; border-radius: 4px; font-weight: 600; }
+.sys-status { width: 80px; height: 30px; font-size: 11px; padding: 3px 10px; border-radius: 4px; font-weight: 600; line-height: 21px; text-align: center;}
 .sys-status.online { background: rgba(74,222,128,0.15); color: #4ade80; border: 1px solid rgba(74,222,128,0.3); }
 .sys-status.busy { background: rgba(79,172,254,0.15); color: #4facfe; border: 1px solid rgba(79,172,254,0.3); animation: pulse 1.2s infinite; }
 .sys-status.warning { background: rgba(255,152,0,0.15); color: #ff9800; border: 1px solid rgba(255,152,0,0.3); }

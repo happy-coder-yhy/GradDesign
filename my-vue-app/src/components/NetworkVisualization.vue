@@ -95,21 +95,15 @@
     </div>
 
     <div class="canvas-container">
-      <canvas
-        ref="networkCanvas"
-        width="1200"
-        height="800"
-        @wheel="handleWheel"
-        @mousedown="handleMouseDown"
-        @mousemove="handleMouseMove"
-        @mouseup="handleMouseUp"
-        @mouseleave="handleMouseUp"
-      ></canvas>
-      <div class="canvas-controls">
-        <button @click="zoomIn" class="zoom-btn">放大 +</button>
-        <button @click="zoomOut" class="zoom-btn">缩小 -</button>
-        <button @click="resetView" class="zoom-btn">重置</button>
-        <span class="zoom-level">缩放: {{ (zoomLevel * 100).toFixed(0) }}%</span>
+      <div class="canvas-wrapper">
+        <canvas
+          ref="networkCanvas"
+          @wheel="handleWheel"
+          @mousedown="handleMouseDown"
+          @mousemove="handleMouseMove"
+          @mouseup="handleMouseUp"
+          @mouseleave="handleMouseUp"
+        ></canvas>
       </div>
     </div>
 
@@ -154,8 +148,14 @@
         <h4>🎯 算法结果</h4>
         <span class="legend-item"><span class="legend-line path-line"></span>{{ resultPathName }}（绿色）</span>
       </div>
-      <div class="legend-section hint-section">
-        <span class="legend-item hint-text">💡 {{ hint }}</span>
+      <div class="legend-section zoom-section">
+        <h4>🔍 视图控制</h4>
+        <div class="zoom-row">
+          <button @click="zoomIn" class="zoom-btn sm">+</button>
+          <button @click="zoomOut" class="zoom-btn sm">−</button>
+          <button @click="resetView" class="zoom-btn sm">重置</button>
+          <span class="zoom-level">{{ (zoomLevel * 100).toFixed(0) }}%</span>
+        </div>
       </div>
     </div>
   </div>
@@ -209,7 +209,10 @@ export default {
       selectedStartNodeId: null, // 选中的起点ID
       selectedGoalNodeId: null, // 选中的终点ID
       selectedStartNode: null, // 选中的起点对象
-      selectedGoalNode: null // 选中的终点对象
+      selectedGoalNode: null, // 选中的终点对象
+      logicalWidth: 1200,
+      logicalHeight: 800,
+      dpr: 1
     }
   },
   computed: {
@@ -261,19 +264,43 @@ export default {
 
       if (this.canvas) {
         this.ctx = this.canvas.getContext('2d');
+        this.syncCanvasSize();
         console.log('Canvas context:', this.ctx);
         console.log('Canvas size:', this.canvas.width, 'x', this.canvas.height);
 
         // 绘制一个测试背景
         this.ctx.fillStyle = '#0a1428';
-        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        this.ctx.fillRect(0, 0, this.logicalWidth, this.logicalHeight);
         this.ctx.fillStyle = '#4facfe';
         this.ctx.font = '20px Arial';
         this.ctx.textAlign = 'center';
-        this.ctx.fillText('Canvas已就绪，请加载路网数据', this.canvas.width / 2, this.canvas.height / 2);
+        this.ctx.fillText('Canvas已就绪，请加载路网数据', this.logicalWidth / 2, this.logicalHeight / 2);
       } else {
         console.error('Canvas element not found!');
       }
+    },
+
+    syncCanvasSize() {
+      if (!this.canvas) return false;
+      const wrapper = this.canvas.parentElement;
+      if (!wrapper) return false;
+      const rect = wrapper.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const logicalW = Math.max(1, Math.round(rect.width));
+      const logicalH = Math.max(1, Math.round(rect.height));
+      const physicalW = logicalW * dpr;
+      const physicalH = logicalH * dpr;
+      const changed = this.canvas.width !== physicalW || this.canvas.height !== physicalH;
+      if (changed) {
+        this.canvas.width = physicalW;
+        this.canvas.height = physicalH;
+      }
+      this.logicalWidth = logicalW;
+      this.logicalHeight = logicalH;
+      this.dpr = dpr;
+      // Reset transform and apply DPR scaling
+      this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      return changed;
     },
 
     setNodes(nodes) {
@@ -332,14 +359,16 @@ export default {
         return;
       }
 
-      const canvas = this.canvas;
+      this.syncCanvasSize();
       const ctx = this.ctx;
+      const logicalW = this.logicalWidth;
+      const logicalH = this.logicalHeight;
 
-      console.log('Canvas dimensions:', canvas.width, 'x', canvas.height);
+      console.log('Canvas logical dimensions:', logicalW, 'x', logicalH, 'DPR:', this.dpr);
 
       // 清空画布
       ctx.fillStyle = '#0a1428';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillRect(0, 0, logicalW, logicalH);
 
       // 计算坐标范围
       const xCoords = this.nodes.map(n => n.x);
@@ -353,27 +382,27 @@ export default {
       console.log('  X:', minX, 'to', maxX, 'width:', maxX - minX);
       console.log('  Y:', minY, 'to', maxY, 'height:', maxY - minY);
 
-      // 基础缩放和偏移
+      // 基础缩放和偏移（使用逻辑尺寸）
       const padding = 50;
-      const scaleX = (canvas.width - 2 * padding) / (maxX - minX);
-      const scaleY = (canvas.height - 2 * padding) / (maxY - minY);
+      const scaleX = (logicalW - 2 * padding) / (maxX - minX);
+      const scaleY = (logicalH - 2 * padding) / (maxY - minY);
       this.baseScale = Math.min(scaleX, scaleY);
 
-      this.baseOffsetX = padding + (canvas.width - 2 * padding - (maxX - minX) * this.baseScale) / 2 - minX * this.baseScale;
-      this.baseOffsetY = padding + (canvas.height - 2 * padding - (maxY - minY) * this.baseScale) / 2 - minY * this.baseScale;
+      this.baseOffsetX = padding + (logicalW - 2 * padding - (maxX - minX) * this.baseScale) / 2 - minX * this.baseScale;
+      this.baseOffsetY = padding + (logicalH - 2 * padding - (maxY - minY) * this.baseScale) / 2 - minY * this.baseScale;
 
       console.log('Base scale:', this.baseScale);
       console.log('Base offset:', this.baseOffsetX, this.baseOffsetY);
 
-      // 保存转换函数（应用缩放和平移）
+      // 保存转换函数（应用缩放和平移，使用逻辑尺寸）
       this.transform = (x, y) => {
         const scaledX = x * this.baseScale + this.baseOffsetX;
-        const scaledY = canvas.height - (y * this.baseScale + this.baseOffsetY);
+        const scaledY = logicalH - (y * this.baseScale + this.baseOffsetY);
 
         // 应用用户缩放和平移
         return {
-          x: (scaledX - canvas.width / 2) * this.zoomLevel + this.panOffset.x + canvas.width / 2,
-          y: (scaledY - canvas.height / 2) * this.zoomLevel + this.panOffset.y + canvas.height / 2
+          x: (scaledX - logicalW / 2) * this.zoomLevel + this.panOffset.x + logicalW / 2,
+          y: (scaledY - logicalH / 2) * this.zoomLevel + this.panOffset.y + logicalH / 2
         };
       };
 
@@ -471,7 +500,7 @@ export default {
       ctx.font = '16px Arial';
       ctx.textAlign = 'center';
       const titleMode = this.showCoreNodesOnly ? '(只显示机位)' : '(机位+跑道点+观察点)';
-      ctx.fillText(`西安机场路网 ${titleMode}`, canvas.width / 2, 25);
+      ctx.fillText(`西安机场路网 ${titleMode}`, logicalW / 2, 25);
 
       // 如果有选中的节点，绘制它们
       if (this.selectedStartNode || this.selectedGoalNode) {
@@ -562,10 +591,10 @@ export default {
     handleWheel(event) {
       event.preventDefault();
 
-      const delta = event.deltaY > 0 ? 0.9 : 1.1;
+      const delta = event.deltaY > 0 ? 0.85 : 1.2;
       const newZoom = this.zoomLevel * delta;
 
-      if (newZoom >= 0.1 && newZoom <= 10) {
+      if (newZoom >= 0.1 && newZoom <= 20) {
         this.zoomLevel = newZoom;
         this.drawNetwork();
         if (this.currentPath) {
@@ -575,7 +604,7 @@ export default {
     },
 
     zoomIn() {
-      if (this.zoomLevel < 10) {
+      if (this.zoomLevel < 20) {
         this.zoomLevel *= 1.2;
         this.drawNetwork();
         if (this.currentPath) {
@@ -728,22 +757,22 @@ export default {
 
 .demo-controls {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.3rem;
   align-items: center;
   flex-wrap: wrap;
-  padding: 0.4rem;
+  padding: 0.2rem;
   justify-content: center;
   flex-shrink: 0;
 }
 
 .node-selection-controls {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.3rem;
   align-items: center;
   flex-wrap: wrap;
-  padding: 0.4rem 0.6rem;
+  padding: 0.2rem 0.4rem;
   background: rgba(20, 30, 60, 0.6);
-  border-radius: 6px;
+  border-radius: 5px;
   border: 1px solid rgba(64, 224, 255, 0.3);
   justify-content: center;
   flex-shrink: 0;
@@ -752,13 +781,13 @@ export default {
 .selection-group {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.25rem;
 }
 
 .selection-label {
   color: #4facfe;
   font-weight: bold;
-  font-size: 0.9rem;
+  font-size: 0.75rem;
   white-space: nowrap;
 }
 
@@ -889,18 +918,16 @@ export default {
   position: relative;
   display: flex;
   flex-direction: column;
-  align-items: center;
   flex: 1;
   min-height: 0;
   background: rgba(0, 0, 0, 0.3);
   border-radius: 6px;
-  padding: 0.4rem;
+  padding: 0.3rem;
   overflow: hidden;
 }
 
 .canvas-container canvas {
-  flex: 1;
-  min-height: 0;
+  display: block;
   width: 100%;
   height: 100%;
   border: 1px solid rgba(64, 224, 255, 0.3);
@@ -908,49 +935,58 @@ export default {
   background: #0a1428;
   box-shadow: 0 0 15px rgba(64, 224, 255, 0.2);
   cursor: grab;
+  object-fit: contain;
 }
 
 .canvas-container canvas:active {
   cursor: grabbing;
 }
 
-.canvas-controls {
-  display: flex;
-  gap: 0.4rem;
-  align-items: center;
-  margin-top: 0.3rem;
-  padding: 0.3rem 0.6rem;
-  background: rgba(20, 30, 60, 0.6);
-  border-radius: 4px;
-  border: 1px solid rgba(64, 224, 255, 0.3);
-  flex-shrink: 0;
-}
-
 .zoom-btn {
-  padding: 0.5rem 1rem;
+  padding: 0.4rem 0.8rem;
   background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
   color: white;
   border: none;
-  border-radius: 5px;
-  font-size: 0.85rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
   cursor: pointer;
   transition: all 0.3s ease;
 }
 
 .zoom-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(79, 172, 254, 0.4);
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px rgba(79, 172, 254, 0.4);
 }
 
 .zoom-level {
   color: #4facfe;
-  font-size: 0.9rem;
-  margin-left: 0.5rem;
-  padding: 0.5rem;
+  font-size: 0.7rem;
+  margin-left: 0.3rem;
+  padding: 0.2rem 0.4rem;
   background: rgba(64, 224, 255, 0.1);
   border-radius: 3px;
-  min-width: 80px;
+  min-width: 50px;
   text-align: center;
+  font-family: monospace;
+}
+
+.zoom-section {
+  display: flex;
+  flex-direction: row !important;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.zoom-row {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.zoom-btn.sm {
+  padding: 0.15rem 0.5rem;
+  font-size: 0.75rem;
+  min-width: 32px;
 }
 
 .path-stats {
@@ -995,31 +1031,34 @@ export default {
 }
 
 .legend {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 0.5rem;
-  padding: 0.4rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.6rem;
+  padding: 0.2rem 0.4rem;
   background: rgba(20, 30, 60, 0.4);
   border-radius: 5px;
   flex-shrink: 0;
-  margin-top: 0.3rem;
+  margin-top: 0.2rem;
+  align-items: center;
 }
 
 .legend-section {
   display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-  padding: 0.8rem;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 0.15rem 0.5rem;
+  padding: 0.15rem 0.3rem;
   background: rgba(30, 40, 70, 0.3);
-  border-radius: 5px;
+  border-radius: 4px;
   border: 1px solid rgba(64, 224, 255, 0.1);
+  align-items: center;
 }
 
 .legend-section h4 {
   color: #4facfe;
-  font-size: 0.95rem;
-  margin-bottom: 0.5rem;
-  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  margin: 0 0.3rem 0 0;
+  white-space: nowrap;
 }
 
 .legend-section:first-child h4 {
@@ -1027,17 +1066,16 @@ export default {
 }
 
 .hint-section {
-  margin-top: 1rem;
-  padding-top: 0.5rem;
-  border-top: 1px solid rgba(64, 224, 255, 0.2);
+  display: none;
 }
 
 .legend-item {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  font-size: 0.85rem;
+  gap: 0.25rem;
+  font-size: 0.7rem;
   color: #a0b3c6;
+  white-space: nowrap;
 }
 
 .hint-text {
@@ -1047,9 +1085,9 @@ export default {
 }
 
 .legend-box {
-  width: 16px;
-  height: 16px;
-  border-radius: 3px;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
   border: 1px solid currentColor;
   flex-shrink: 0;
 }
@@ -1070,8 +1108,8 @@ export default {
 }
 
 .legend-line {
-  width: 30px;
-  height: 3px;
+  width: 16px;
+  height: 2px;
   flex-shrink: 0;
 }
 
@@ -1131,14 +1169,9 @@ export default {
     padding: 1rem;
   }
 
-  .canvas-container canvas {
+  .canvas-wrapper canvas {
     width: 100%;
-    height: auto;
-  }
-
-  .canvas-controls {
-    flex-wrap: wrap;
-    justify-content: center;
+    height: 100%;
   }
 
   .stats-grid {
