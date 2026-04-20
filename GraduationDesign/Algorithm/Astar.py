@@ -483,7 +483,8 @@ class AStarOptimizer:
                  weight_distance: float = 1.0,
                  weight_time: float = 1.0,
                  weight_fuel: float = 0.5,
-                 aircraft_speed: float = 15.0):
+                 aircraft_speed: float = 15.0,
+                 weather_factor: float = 1.0):
         """
         初始化A*优化器
 
@@ -493,32 +494,43 @@ class AStarOptimizer:
             weight_time: 时间权重
             weight_fuel: 燃料消耗权重
             aircraft_speed: 航空器平均滑行速度（米/秒）
+            weather_factor: 天气速度折扣系数（0.0~1.0），
+                           基于文献：晴=1.0, 小雨=0.85, 中雨=0.70, 大雨=0.55, 暴雨/雪/雾=0.40
         """
         self.graph = graph
         self.weight_distance = weight_distance
         self.weight_time = weight_time
         self.weight_fuel = weight_fuel
         self.aircraft_speed = aircraft_speed
+        self.weather_factor = weather_factor
 
-    def heuristic(self, node: Node, goal: Node, weights: Dict[str, float] = None) -> float:
+    def heuristic(self, node: Node, goal: Node, 
+                  weights: Dict[str, float] = None,
+                  weather_factor: float = None) -> float:
         """
         启发式函数（h函数）：估算从当前节点到目标节点的代价
 
-        使用欧几里得距离作为启发式，保证可采纳性
+        使用欧几里得距离作为启发式，保证可采纳性。
+        考虑天气因子：恶劣天气下实际滑行速度降低，时间代价增加。
 
         参数:
             node: 当前节点
             goal: 目标节点
             weights: 可选的权重字典，如果为None则使用实例权重
+            weather_factor: 可选的天气折扣系数，如果为None则使用实例值
 
         返回:
             估算代价
         """
         # 欧几里得距离
         distance = math.sqrt((node.x - goal.x)**2 + (node.y - goal.y)**2)
-
-        # 转换为综合代价
-        return self._calculate_cost(distance, distance / self.aircraft_speed, weights)
+        
+        # 考虑天气因子的实际速度
+        wf = weather_factor if weather_factor is not None else self.weather_factor
+        effective_speed = self.aircraft_speed * max(wf, 0.1)  # 防止除零
+        
+        # 转换为综合代价（天气差时时间更长）
+        return self._calculate_cost(distance, distance / effective_speed, weights)
 
     def _calculate_cost(self, distance: float, time: float,
                        weights: Dict[str, float] = None) -> float:
@@ -560,7 +572,8 @@ class AStarOptimizer:
         return total_cost
 
     def find_path(self, start: Node, goal: Node,
-                  weights: Dict[str, float] = None) -> Tuple[Optional[List[Node]], Dict]:
+                  weights: Dict[str, float] = None,
+                  weather_factor: float = None) -> Tuple[Optional[List[Node]], Dict]:
         """
         使用A*算法查找最优路径
 
@@ -569,10 +582,16 @@ class AStarOptimizer:
             goal: 目标节点
             weights: 可选的权重字典，格式: {'distance': float, 'time': float, 'fuel': float}
                    如果提供，将临时覆盖当前的权重设置
+            weather_factor: 可选的天气速度折扣系数（0.0~1.0），
+                           如果提供，将临时覆盖当前的天气设置
 
         返回:
             (路径, 统计信息字典)
         """
+        # 确定本次搜索使用的天气因子
+        wf = weather_factor if weather_factor is not None else self.weather_factor
+        effective_speed = self.aircraft_speed * max(wf, 0.1)
+        
         # 初始化
         open_set = []  # 优先队列（开放集合）
         closed_set: Set[int] = set()  # 已访问节点集合
@@ -580,7 +599,7 @@ class AStarOptimizer:
 
         # 创建起始节点
         start_path_node = PathNode(
-            f_score=self.heuristic(start, goal, weights),
+            f_score=self.heuristic(start, goal, weights, wf),
             g_score=0.0,
             node=start,
             parent=None
@@ -602,7 +621,7 @@ class AStarOptimizer:
             if current.node.id == goal.id:
                 # 重建路径
                 path = self._reconstruct_path(current)
-                stats = self._calculate_path_stats(path, weights)
+                stats = self._calculate_path_stats(path, weights, wf)
 
                 print(f"\n✓ 找到最优路径！")
                 print(f"  - 迭代次数: {iterations}")
@@ -610,6 +629,8 @@ class AStarOptimizer:
                 print(f"  - 路径长度: {stats['total_distance']:.2f} 米")
                 print(f"  - 预计时间: {stats['total_time']:.2f} 秒 ({stats['total_time']/60:.2f} 分钟)")
                 print(f"  - 燃料消耗: {stats['fuel_consumption']:.2f} 单位")
+                print(f"  - 天气因子: {wf}")
+                print(f"  - 有效速度: {effective_speed:.2f} m/s")
                 print(f"  - 综合代价: {stats['total_cost']:.2f}")
 
                 return path, stats
@@ -625,8 +646,11 @@ class AStarOptimizer:
                 if neighbor.id in closed_set:
                     continue
 
-                # 计算从起点到邻居的实际代价
-                travel_time = edge.length / min(edge.speed_limit, self.aircraft_speed)
+                # 计算从起点到邻居的实际代价（考虑天气因子）
+                # 恶劣天气下：实际滑行速度 = min(限速, 航空器速度 * 天气因子)
+                actual_speed = min(edge.speed_limit, effective_speed)
+                travel_time = edge.length / actual_speed
+                
                 tentative_g_score = current.g_score + self._calculate_cost(
                     edge.length, travel_time, weights
                 )
@@ -635,7 +659,7 @@ class AStarOptimizer:
                 if neighbor.id not in path_nodes or tentative_g_score < path_nodes[neighbor.id].g_score:
                     # 创建新的路径节点
                     neighbor_path_node = PathNode(
-                        f_score=tentative_g_score + self.heuristic(neighbor, goal, weights),
+                        f_score=tentative_g_score + self.heuristic(neighbor, goal, weights, wf),
                         g_score=tentative_g_score,
                         node=neighbor,
                         parent=current
@@ -663,16 +687,22 @@ class AStarOptimizer:
         path.reverse()
         return path
 
-    def _calculate_path_stats(self, path: List[Node], weights: Dict[str, float] = None) -> Dict:
+    def _calculate_path_stats(self, path: List[Node], 
+                              weights: Dict[str, float] = None,
+                              weather_factor: float = None) -> Dict:
         """计算路径统计信息
 
         参数:
             path: 路径节点列表
             weights: 可选的权重字典
+            weather_factor: 可选的天气折扣系数
 
         返回:
             统计信息字典
         """
+        wf = weather_factor if weather_factor is not None else self.weather_factor
+        effective_speed = self.aircraft_speed * max(wf, 0.1)
+        
         total_distance = 0.0
         total_time = 0.0
         fuel_consumption = 0.0
@@ -686,11 +716,12 @@ class AStarOptimizer:
                                (current_node.y - next_node.y)**2)
             total_distance += distance
 
-            # 计算时间
-            time = distance / self.aircraft_speed
+            # 计算时间（考虑天气因子：天气越差，时间越长）
+            time = distance / effective_speed
             total_time += time
 
-            # 计算燃料消耗
+            # 计算燃料消耗（恶劣天气燃料消耗增加）
+            # 基础燃料 + 时间相关燃料（天气差时需要更多推力/制动）
             fuel_consumption += distance * 0.1 + time * 0.05
 
         total_cost = self._calculate_cost(total_distance, total_time, weights)
@@ -700,7 +731,9 @@ class AStarOptimizer:
             'total_time': total_time,
             'fuel_consumption': fuel_consumption,
             'total_cost': total_cost,
-            'num_nodes': len(path)
+            'num_nodes': len(path),
+            'weather_factor': wf,
+            'effective_speed': effective_speed
         }
 
     def find_k_shortest_paths(self, start: Node, goal: Node, k: int = 3) -> List[Tuple[List[Node], Dict]]:

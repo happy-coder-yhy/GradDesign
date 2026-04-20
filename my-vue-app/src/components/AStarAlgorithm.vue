@@ -39,6 +39,7 @@
           <span>LIVE</span>
         </div>
         <div class="clock">{{ currentTime }}</div>
+        <WeatherWidget />
         <div class="sys-status" :class="getSystemStatusClass()">{{ getSystemStatusText() }}</div>
       </div>
     </header>
@@ -423,6 +424,7 @@
 <script>
 import axios from 'axios';
 import NetworkVisualization from './NetworkVisualization.vue';
+import WeatherWidget from './WeatherWidget.vue';
 import * as XLSX from 'xlsx';
 import { ElMessage } from 'element-plus';
 
@@ -431,7 +433,8 @@ const API_BASE = 'http://localhost:5001/api';
 export default {
   name: 'AStarAlgorithm',
   components: {
-    NetworkVisualization
+    NetworkVisualization,
+    WeatherWidget
   },
   mounted() {
     this.startTimer();
@@ -2132,7 +2135,7 @@ export default {
 }
 .kpi-value small { font-size: 11px; color: #8aa; margin-left: 2px; }
 .kpi-value.danger { color: #ff4d4f; text-shadow: 0 0 10px rgba(255,77,79,0.5); }
-.header-right { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
+.header-right { display: flex; align-items: center; justify-content: flex-end; gap: 8px; white-space: nowrap; }
 .live-badge {
   display: flex; align-items: center; gap: 6px;
   background: rgba(0,0,0,0.3); border-radius: 20px; padding: 4px 10px;
@@ -2145,7 +2148,7 @@ export default {
   animation: blink 1.5s infinite;
 }
 @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
-.clock { font-size: 13px; color: #c0d8e8; font-family: monospace; }
+.clock { font-size: 12px; color: #c0d8e8; font-family: monospace; white-space: nowrap; }
 .sys-status { width: 80px; height: 30px; font-size: 11px; padding: 3px 10px; border-radius: 4px; font-weight: 600; line-height: 21px; text-align: center;}
 .sys-status.online { background: rgba(74,222,128,0.15); color: #4ade80; border: 1px solid rgba(74,222,128,0.3); }
 .sys-status.busy { background: rgba(79,172,254,0.15); color: #4facfe; border: 1px solid rgba(79,172,254,0.3); animation: pulse 1.2s infinite; }

@@ -24,6 +24,7 @@ import copy
 
 from .Astar import AirportGraph, Node, AStarOptimizer
 from .DensityAnalyzer import DensityAnalyzer
+from .WeatherService import get_weather_service, WeatherService
 
 
 class OperationType(Enum):
@@ -276,7 +277,8 @@ class MultiAircraftScheduler:
     """
 
     def __init__(self, graph: AirportGraph, strategy: str = 'fcfs',
-                 time_window_minutes: int = 30, peak_threshold: float = 0.6):
+                 time_window_minutes: int = 30, peak_threshold: float = 0.6,
+                 use_weather: bool = True):
         """
         初始化调度器
 
@@ -285,6 +287,7 @@ class MultiAircraftScheduler:
             strategy: 调度策略 ('fcfs', 'priority', 'time_window')
             time_window_minutes: 时间窗口大小（分钟），用于密度分析
             peak_threshold: 高峰期阈值（密度百分比）
+            use_weather: 是否考虑天气因素
         """
         self.graph = graph
         self.strategy = strategy
@@ -294,6 +297,9 @@ class MultiAircraftScheduler:
             time_window_minutes=time_window_minutes,
             peak_threshold=peak_threshold
         )
+        self.use_weather = use_weather
+        self.weather_service = get_weather_service() if use_weather else None
+        self.current_weather_factor = 1.0
 
     def schedule_multiple_flights(self, flights: List[Flight],
                                   max_iterations: int = 10) -> Dict[str, AircraftSchedule]:
@@ -461,9 +467,18 @@ class MultiAircraftScheduler:
         )
         weights = self.density_analyzer.get_weights_for_period(period_type)
 
-        # 使用A*算法找路径，传入动态权重
+        # 获取天气因子（如果启用天气功能）
+        weather_factor = 1.0
+        if self.use_weather and self.weather_service:
+            weather = self.weather_service.get_current_weather()
+            weather_factor = weather.weather_factor
+            self.current_weather_factor = weather_factor
+
+        # 使用A*算法找路径，传入动态权重和天气因子
         path, stats = self.optimizer.find_path(
-            flight.start_node, flight.end_node, weights=weights
+            flight.start_node, flight.end_node, 
+            weights=weights,
+            weather_factor=weather_factor
         )
 
         if not path:
