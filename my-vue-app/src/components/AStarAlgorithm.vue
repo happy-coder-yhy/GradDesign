@@ -278,7 +278,7 @@
           </div>
           <div class="panel-body">
             <div class="alarm-list">
-              <div v-for="c in allConflicts.slice(0, 6)" :key="c.conflict_id" class="alarm-card" :class="c.severity">
+              <div v-for="c in allConflicts.slice(0, 6)" :key="c.conflict_id" class="alarm-card" :class="c.severity" @click="selectConflictFlights(c)">
                 <div class="alarm-row">
                   <span class="alarm-type">{{ getConflictTypeText(c.conflict_type) }}</span>
                   <span class="alarm-time">{{ formatTime(c.time) }}</span>
@@ -1514,6 +1514,16 @@ export default {
       this.drawMultiAircraftPaths();
     },
 
+    // 点击告警信息，选中冲突航班
+    selectConflictFlights(conflict) {
+      if (!conflict || !conflict.flight_ids || conflict.flight_ids.length === 0) return;
+      // 清空当前选中，只选中冲突涉及的航班
+      this.selectedFlightIds = [...conflict.flight_ids];
+      this.manuallyCleared = false;
+      // 重新绘制画布
+      this.drawMultiAircraftPaths();
+    },
+
     // ========== 备选路径相关方法 ==========
     async showPathAlternatives(flight) {
       this.selectedFlight = flight;
@@ -2221,7 +2231,10 @@ export default {
   background: rgba(255,255,255,0.03);
   border-left: 3px solid rgba(79,172,254,0.4);
   font-size: 11px;
+  cursor: pointer;
+  transition: background .2s;
 }
+.alarm-card:hover { background: rgba(255,255,255,0.08); }
 .alarm-card.high { border-left-color: #f44336; background: rgba(244,67,54,0.08); }
 .alarm-card.medium { border-left-color: #ff9800; background: rgba(255,152,0,0.08); }
 .alarm-row { display: flex; justify-content: space-between; margin-bottom: 3px; }
