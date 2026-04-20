@@ -591,8 +591,11 @@ export default {
     handleWheel(event) {
       event.preventDefault();
 
-      const delta = event.deltaY > 0 ? 0.85 : 1.2;
-      const newZoom = this.zoomLevel * delta;
+      // 平滑滚轮缩放：根据 deltaY 大小动态调整缩放强度，降低单次滚动的敏感度
+      const absDelta = Math.abs(event.deltaY);
+      const step = Math.min(absDelta / 100, 3); // 归一化步长，最大为3
+      const factor = event.deltaY > 0 ? Math.pow(0.97, step) : Math.pow(1.03, step);
+      const newZoom = this.zoomLevel * factor;
 
       if (newZoom >= 0.1 && newZoom <= 20) {
         this.zoomLevel = newZoom;
@@ -605,7 +608,7 @@ export default {
 
     zoomIn() {
       if (this.zoomLevel < 20) {
-        this.zoomLevel *= 1.2;
+        this.zoomLevel *= 1.15;
         this.drawNetwork();
         if (this.currentPath) {
           this.drawPath();
@@ -615,7 +618,7 @@ export default {
 
     zoomOut() {
       if (this.zoomLevel > 0.1) {
-        this.zoomLevel /= 1.2;
+        this.zoomLevel /= 1.15;
         this.drawNetwork();
         if (this.currentPath) {
           this.drawPath();

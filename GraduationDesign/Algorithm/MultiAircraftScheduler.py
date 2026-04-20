@@ -671,13 +671,16 @@ def generate_simulation_data(graph: AirportGraph, num_flights: int = 5) -> List[
         random.shuffle(time_offsets)
 
     attempts = 0
-    max_attempts = num_flights * 10
+    max_attempts = num_flights * 20
+    time_idx = 0
 
-    for time_offset in time_offsets:
+    while len(flights) < num_flights and attempts < max_attempts:
         attempts += 1
+        time_offset = time_offsets[time_idx % len(time_offsets)]
+        time_idx += 1
         
         # 随机选择起点和终点
-        if len(flights) % 2 == 0:
+        if random.random() < 0.5:
             start_node = random.choice(stands)
             end_node = random.choice(runways)
             operation = OperationType.DEPARTURE

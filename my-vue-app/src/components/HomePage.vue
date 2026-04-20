@@ -1,27 +1,40 @@
 <template>
-  <div class="home-content">
-    <section class="algorithm-selection">
-      <!-- A*算法卡片 -->
-      <div
-        class="algorithm-card"
-        @click="selectAlgorithm(currentAlgorithm)"
-      >
-        <div class="icon">{{ currentAlgorithm.icon }}</div>
-        <h3>{{ currentAlgorithm.name }}</h3>
-        <p>{{ currentAlgorithm.description }}</p>
+  <div class="home-page">
+    <header class="page-header">
+      <div class="container">
+        <h1 class="title">机场场面滑行轨迹优化系统</h1>
+        <p class="subtitle">智能优化飞机滑行路径，提升机场运行效率</p>
       </div>
-    </section>
+    </header>
 
-    <!-- 开发者信息 -->
-    <section class="developer-info">
-      <div class="info-card">
-        <div class="info-content">
-          <p><span class="label">姓名:</span> <span class="value">袁皓宇</span></p>
-          <p><span class="label">专业:</span> <span class="value">计算机科学与技术</span></p>
-          <p><span class="label">指导老师:</span> <span class="value">左海超</span></p>
+    <main class="home-content">
+      <section class="algorithm-selection">
+        <div
+          class="algorithm-card"
+          @click="selectAlgorithm(currentAlgorithm)"
+        >
+          <div class="icon">{{ currentAlgorithm.icon }}</div>
+          <h3>{{ currentAlgorithm.name }}</h3>
+          <p>{{ currentAlgorithm.description }}</p>
         </div>
+      </section>
+
+      <section class="developer-info">
+        <div class="info-card">
+          <div class="info-content">
+            <p><span class="label">姓名:</span> <span class="value">袁皓宇</span></p>
+            <p><span class="label">专业:</span> <span class="value">计算机科学与技术</span></p>
+            <p><span class="label">指导老师:</span> <span class="value">左海超</span></p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="page-footer">
+      <div class="container">
+        <p>&copy; 2026 机场场面滑行轨迹优化系统 | 民航智能化解决方案</p>
       </div>
-    </section>
+    </footer>
   </div>
 </template>
 
@@ -46,10 +59,55 @@ export default {
 }
 </script>
 
-<style>
-.home-content {
+<style scoped>
+.home-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+/* 页头 */
+.page-header {
+  background: rgba(10, 15, 47, 0.85);
+  backdrop-filter: blur(10px);
+  color: white;
   padding: 2rem 0;
-  min-height: calc(100vh - 200px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  border-bottom: 1px solid rgba(64, 224, 255, 0.3);
+  flex-shrink: 0;
+}
+
+.title {
+  font-size: 2.5rem;
+  text-align: center;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+  background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: 0 0 15px rgba(79, 172, 254, 0.3);
+}
+
+.subtitle {
+  text-align: center;
+  font-size: 1.1rem;
+  opacity: 0.9;
+  max-width: 600px;
+  margin: 0 auto;
+  font-weight: 300;
+  color: #a0b3c6;
+}
+
+/* 主体内容 */
+.home-content {
+  flex: 1;
+  padding: 2rem 0;
 }
 
 .algorithm-selection {
@@ -58,8 +116,6 @@ export default {
   justify-content: center;
   align-items: center;
 }
-
-
 
 .algorithm-card {
   background: rgba(20, 30, 60, 0.6);
@@ -140,14 +196,6 @@ export default {
   margin: 0 auto;
 }
 
-.info-card h3 {
-  font-size: 1.5rem;
-  margin-bottom: 1.5rem;
-  background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
 .info-content {
   text-align: left;
 }
@@ -173,7 +221,22 @@ export default {
   text-align: right;
 }
 
+/* 页脚 */
+.page-footer {
+  background: rgba(10, 15, 47, 0.85);
+  color: #a0b3c6;
+  text-align: center;
+  padding: 1.5rem 0;
+  border-top: 1px solid rgba(64, 224, 255, 0.3);
+  backdrop-filter: blur(10px);
+  flex-shrink: 0;
+}
+
 @media (max-width: 768px) {
+  .title {
+    font-size: 1.8rem;
+  }
+
   .algorithm-card {
     max-width: 90%;
     padding: 2rem 1.5rem;

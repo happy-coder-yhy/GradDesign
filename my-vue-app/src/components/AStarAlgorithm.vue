@@ -120,6 +120,15 @@
                 <div class="period-sub">时间权重 {{ weights.time.toFixed(1) }} | 燃料权重 {{ weights.fuel.toFixed(1) }}</div>
               </div>
             </div>
+            <div class="density-bar-wrap" v-if="flightDensity">
+              <div class="density-label">
+                <span>航班密度</span>
+                <span class="density-val">{{ flightDensity.average_density.toFixed(1) }} 架次/小时</span>
+              </div>
+              <div class="density-track">
+                <div class="density-fill" :class="currentPeriodType" :style="{ width: Math.min(100, (flightDensity.average_density / 60) * 100) + '%' }"></div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -127,7 +136,10 @@
           <div class="panel-header"><span class="panel-title">航班状态</span></div>
           <div class="panel-body center">
             <div class="pie-wrap">
-              <div class="pie" :style="pieStyle"></div>
+              <div class="pie">
+                <div class="pie-half left" :style="{ background: pieColors.departure }"></div>
+                <div class="pie-half right" :style="{ background: pieColors.arrival }"></div>
+              </div>
               <div class="pie-legend">
                 <div v-for="s in getOperationStats()" :key="s.label" class="pie-lv">
                   <span class="dot" :style="{ background: s.color }"></span>
@@ -330,15 +342,15 @@
           </div>
           <div class="d-bars">
             <div class="d-row">
-              <span>平均延误</span>
+              <span :title="statistics ? '平均延误: ' + (statistics.total_delay/statistics.flight_count/60).toFixed(2) + ' 分钟' : '平均延误: 0.00 分钟'">平均延误</span>
               <div class="d-track"><div class="d-fill" :style="{ width: Math.min(100, (statistics?(statistics.total_delay/statistics.flight_count/60):0)*10)+'%' }"></div></div>
             </div>
             <div class="d-row">
-              <span>平均距离</span>
+              <span :title="statistics ? '平均距离: ' + (statistics.total_distance/statistics.flight_count/1000).toFixed(2) + ' km' : '平均距离: 0.00 km'">平均距离</span>
               <div class="d-track"><div class="d-fill blue" :style="{ width: Math.min(100, (statistics?(statistics.total_distance/statistics.flight_count/100):0))+'%' }"></div></div>
             </div>
             <div class="d-row">
-              <span>平均时间</span>
+              <span :title="statistics ? '平均时间: ' + (statistics.total_time/statistics.flight_count/60).toFixed(2) + ' 分钟' : '平均时间: 0.00 分钟'">平均时间</span>
               <div class="d-track"><div class="d-fill cyan" :style="{ width: Math.min(100, (statistics?(statistics.total_time/statistics.flight_count/60):0)*3)+'%' }"></div></div>
             </div>
           </div>
@@ -390,12 +402,15 @@
           </div>
           <div v-if="loadingAlternatives" class="loading"><div class="spinner"></div><p>查找中...</p></div>
           <div v-else-if="pathAlternatives.length" class="alt-list">
-            <div v-for="alt in pathAlternatives" :key="alt.path_id" class="alt-card" :class="{ active: alt.path_id === activePathId }">
-              <div class="alt-rank">路径 {{ alt.rank }} <span v-if="alt.is_original" class="tag">当前</span></div>
+            <div v-for="alt in pathAlternatives" :key="alt.path_id" class="alt-card" :class="{ active: alt.path_id === activePathId, conflict: alt.has_conflict }">
+              <div class="alt-rank">路径 {{ alt.rank }}
+                <span v-if="alt.is_original" class="tag">当前</span>
+                <span v-if="alt.has_conflict" class="tag conflict">冲突</span>
+              </div>
               <div class="alt-stat">📏 {{ (alt.distance/1000).toFixed(2) }} km | ⏱ {{ (alt.time/60).toFixed(1) }} min</div>
               <div class="alt-actions">
-                <button @click="previewPath(alt)" :disabled="alt.path_id===activePathId">预览</button>
-                <button class="primary" @click="applyAlternativePath(alt)" :disabled="alt.path_id===activePathId">应用</button>
+                <button @click="togglePreview(alt)" :disabled="alt.path_id===activePathId || alt.disabled">{{ isPreviewingPath && previewPathData && previewPathData.path_id === alt.path_id ? '取消预览' : '预览' }}</button>
+                <button class="primary" @click="applyAlternativePath(alt)" :disabled="alt.path_id===activePathId || alt.disabled">应用</button>
               </div>
             </div>
           </div>
@@ -555,19 +570,15 @@ export default {
 
       return Array.from(conflictMap.values());
     },
-    pieStyle() {
+    pieColors() {
       const stats = this.getOperationStats();
-      if (!stats.length) return {};
-      const total = stats.reduce((s, i) => s + i.value, 0);
-      if (total === 0) return {};
-      let grad = [];
-      let acc = 0;
-      stats.forEach(s => {
-        const pct = (s.value / total) * 100;
-        grad.push(`${s.color} ${acc}% ${acc + pct}%`);
-        acc += pct;
-      });
-      return { background: `conic-gradient(${grad.join(', ')})` };
+      if (!stats.length) return { departure: '#ff69b4', arrival: '#00f2fe' };
+      const dep = stats.find(s => s.label === '离港');
+      const arr = stats.find(s => s.label === '进港');
+      return {
+        departure: dep ? dep.color : '#ff69b4',
+        arrival: arr ? arr.color : '#00f2fe'
+      };
     },
   },
 
@@ -1003,7 +1014,7 @@ export default {
       this.drawMultiAircraftPaths();
     },
 
-    drawMultiAircraftPaths() {
+    drawMultiAircraftPaths(skipPreview = false) {
       const canvas = this.$refs.multiCanvas;
       if (!canvas) return;
 
@@ -1025,10 +1036,16 @@ export default {
         this.drawMultiFlightPaths();
       }
 
-      // 如果正在预览路径，重绘预览路径
-      if (this.isPreviewingPath && this.previewPathData) {
+      // 如果正在预览路径，重绘预览路径（skipPreview 用于避免 drawPreviewPath 内部调用时的递归）
+      if (!skipPreview && this.isPreviewingPath && this.previewPathData) {
         this.$nextTick(() => {
-          this.drawPreviewPath(this.previewPathData);
+          try {
+            if (this.isPreviewingPath && this.previewPathData) {
+              this.drawPreviewPath(this.previewPathData);
+            }
+          } catch (err) {
+            console.error('预览路径重绘失败:', err);
+          }
         });
       }
     },
@@ -1152,18 +1169,19 @@ export default {
       ];
 
       // 确定要显示的航班
-      // 如果手动清除了选择，不显示任何航班；否则如果没有选择任何航班，显示所有航班；如果选择了航班，只显示选中的航班
       let schedulesToDraw;
-      if (this.manuallyCleared) {
-        schedulesToDraw = [];
-      } else if (this.selectedFlightIds.length === 0) {
-        schedulesToDraw = this.schedules;
+      if (this.selectedFlightIds.length === 0) {
+        // 空选择时：用户主动清空则不显示；默认状态（调度刚完成）显示全部
+        schedulesToDraw = this.manuallyCleared ? [] : this.schedules;
       } else {
         schedulesToDraw = this.schedules.filter(s => this.selectedFlightIds.includes(s.flight_id));
       }
 
       // 绘制路径
       schedulesToDraw.forEach((schedule) => {
+        // 跳过没有路径数据的航班
+        if (!schedule.path || schedule.path.length === 0) return;
+
         // 根据operation类型选择颜色
         const operation = schedule.operation || 'departure'; // 默认为departure
         const colorList = operation === 'departure' ? departureColors : arrivalColors;
@@ -1221,10 +1239,8 @@ export default {
 
       // 绘制冲突点（只绘制选中航班的冲突）
       let conflictsToDraw;
-      if (this.manuallyCleared) {
-        conflictsToDraw = [];
-      } else if (this.selectedFlightIds.length === 0) {
-        conflictsToDraw = this.allConflicts;
+      if (this.selectedFlightIds.length === 0) {
+        conflictsToDraw = this.manuallyCleared ? [] : this.allConflicts;
       } else {
         conflictsToDraw = this.allConflicts.filter(conflict =>
           conflict.flight_ids.some(id => this.selectedFlightIds.includes(id))
@@ -1463,9 +1479,6 @@ export default {
       // 只有在调度完成后才能选择
       if (!this.schedules.length) return;
 
-      // 清除手动清除标记
-      this.manuallyCleared = false;
-
       const index = this.selectedFlightIds.indexOf(flightId);
       if (index > -1) {
         // 取消选择
@@ -1508,6 +1521,9 @@ export default {
       this.loadingAlternatives = true;
       this.pathAlternatives = [];
       this.activePathId = 'path_1';
+      // 重置预览状态，避免切换航班时残留旧预览
+      this.isPreviewingPath = false;
+      this.previewPathData = null;
 
       try {
         const schedule = this.getScheduleResult(flight.flight_id);
@@ -1578,12 +1594,16 @@ export default {
               num_nodes: schedule.path.length,
               rank: 1,
               differences_from_best: { distance: 0, time: 0, fuel: 0 },
-              is_original: true
+              is_original: true,
+              has_conflict: schedule.conflicts && schedule.conflicts.length > 0,
+              disabled: false
             },
             // 过滤后的备选路径从2开始编号
             ...filteredPaths.map((path, index) => ({
               ...path,
-              rank: index + 2
+              rank: index + 2,
+              has_conflict: false,
+              disabled: false
             }))
           ];
           this.activePathId = 'path_original';
@@ -1616,39 +1636,58 @@ export default {
       this.applyAlternativePath(altPath);
     },
 
+    togglePreview(altPath) {
+      if (this.isPreviewingPath && this.previewPathData && this.previewPathData.path_id === altPath.path_id) {
+        this.cancelPreview();
+      } else {
+        this.previewPath(altPath);
+      }
+    },
+
     async previewPath(altPath) {
       // 预览选中的路径（在画布中高亮显示）
       try {
+        // 如果正在预览其他路径，先取消之前的预览
+        if (this.isPreviewingPath && this.previewPathData && this.previewPathData.path_id !== altPath.path_id) {
+          this.isPreviewingPath = false;
+          this.previewPathData = null;
+        }
+
         // 保存预览状态和数据
         this.isPreviewingPath = true;
         this.previewPathData = altPath;
 
         // 绘制预览路径
-        await this.drawPreviewPath(altPath);
+        this.drawPreviewPath(altPath);
         ElMessage.success(`正在预览路径${altPath.rank || '原始'}`);
       } catch (error) {
         console.error('预览路径失败:', error);
         ElMessage.error('预览路径失败');
+        // 预览失败时重置状态
+        this.isPreviewingPath = false;
+        this.previewPathData = null;
       }
     },
 
-    async drawPreviewPath(altPath) {
-      if (!this.multiTransform) return;
+    drawPreviewPath(altPath) {
+      if (!this.multiTransform || !altPath || !altPath.nodes) return;
+
+      // 先清空画布并重绘基础状态，避免旧预览路径残留（传 true 防止递归调用）
+      this.drawMultiAircraftPaths(true);
 
       const ctx = this.multiCtx;
 
-      // 先重绘所有已选择的航班路径（半透明）
+      // 再重绘所有已选择的航班路径（半透明）
       let schedulesToDraw;
-      if (this.manuallyCleared) {
-        schedulesToDraw = [];
-      } else if (this.selectedFlightIds.length === 0) {
-        schedulesToDraw = this.schedules;
+      if (this.selectedFlightIds.length === 0) {
+        schedulesToDraw = this.manuallyCleared ? [] : this.schedules;
       } else {
         schedulesToDraw = this.schedules.filter(s => this.selectedFlightIds.includes(s.flight_id));
       }
 
+      const currentFlightId = this.selectedFlight ? this.selectedFlight.flight_id : null;
       schedulesToDraw.forEach((schedule) => {
-        if (schedule.flight_id === this.selectedFlight.flight_id) {
+        if (currentFlightId && schedule.flight_id === currentFlightId) {
           // 当前查看的航班，用半透明显示
           this.drawPath(ctx, schedule.path, 'rgba(79, 172, 254, 0.2)', false);
         } else {
@@ -1725,10 +1764,11 @@ export default {
         }
 
         const schedule = this.schedules[scheduleIndex];
+        const scheduleConflicts = schedule.conflicts || [];
         
         // 获取当前航班的所有冲突节点
         const conflictNodeIds = new Set();
-        schedule.conflicts.forEach(c => conflictNodeIds.add(c.node_id));
+        scheduleConflicts.forEach(c => conflictNodeIds.add(c.node_id));
         
         // 检查新路径是否避开了所有冲突节点
         const newPathNodeIds = altPath.nodes.map(n => n.id);
@@ -1749,35 +1789,50 @@ export default {
           return;
         }
 
-        // 更新调度结果中的路径
-        schedule.path = altPath.nodes;
-        schedule.total_distance = altPath.distance;
-        schedule.total_time = altPath.time;
+        // Vue 3 中直接赋值即可保持响应式
+        const updatedSchedule = {
+          ...schedule,
+          path: altPath.nodes,
+          total_distance: altPath.distance,
+          total_time: altPath.time,
+          conflicts: [],
+          conflict_count: 0
+        };
+        this.schedules[scheduleIndex] = updatedSchedule;
         
         // 获取被解决的冲突节点
-        const resolvedConflictNodes = new Set(schedule.conflicts.map(c => c.node_id));
-        
-        // 标记冲突已消解（清空当前航班的冲突列表）
-        schedule.conflicts = [];
-        schedule.conflict_count = 0;
+        const resolvedConflictNodes = new Set(scheduleConflicts.map(c => c.node_id));
         
         // 更新其他航班的冲突列表 - 移除涉及已解决冲突的条目
-        this.schedules.forEach(otherSchedule => {
+        this.schedules.forEach((otherSchedule, idx) => {
           if (otherSchedule.flight_id !== this.selectedFlight.flight_id) {
-            
-            otherSchedule.conflicts = otherSchedule.conflicts.filter(c => {
+            const otherConflicts = otherSchedule.conflicts || [];
+            const newConflicts = otherConflicts.filter(c => {
               // 如果冲突涉及当前航班且冲突节点已被解决，则移除
               const involvesCurrentFlight = c.flight_ids.includes(this.selectedFlight.flight_id);
               const isResolvedNode = resolvedConflictNodes.has(c.node_id);
               // 保留：不涉及当前航班 或 涉及但不是已解决的节点
               return !(involvesCurrentFlight && isResolvedNode);
             });
-            otherSchedule.conflict_count = otherSchedule.conflicts.length;
+            if (newConflicts.length !== otherConflicts.length) {
+              this.schedules[idx] = {
+                ...otherSchedule,
+                conflicts: newConflicts,
+                conflict_count: newConflicts.length
+              };
+            }
           }
         });
 
         // 更新选中航班的路径
         this.selectedFlight.path = altPath.nodes;
+
+        // 更新 pathAlternatives：新路径标记为当前，原始冲突路径禁用
+        this.pathAlternatives = this.pathAlternatives.map(pa => ({
+          ...pa,
+          is_original: pa.path_id === altPath.path_id,
+          disabled: pa.has_conflict && pa.path_id !== altPath.path_id
+        }));
 
         // 更新 activePathId 为当前使用的路径
         this.activePathId = altPath.path_id;
@@ -1800,11 +1855,12 @@ export default {
         });
 
         // 关闭备选路径面板
-        this.showAlternativePaths = false;
+        this.showPathAlternativesPanel = false;
 
         // 显示成功消息
-        const distanceDiff = altPath.differences_from_best.distance;
-        const timeDiff = altPath.differences_from_best.time;
+        const diff = altPath.differences_from_best || { distance: 0, time: 0 };
+        const distanceDiff = diff.distance || 0;
+        const timeDiff = diff.time || 0;
 
         let message = '冲突已消解';
         message += `，已选择路径${altPath.rank}`;
@@ -1960,7 +2016,7 @@ export default {
       const dep = this.flights.filter(f => f.operation === 'departure').length;
       const arr = this.flights.filter(f => f.operation === 'arrival').length;
       return [
-        { label: '离港', value: dep, color: '#4facfe' },
+        { label: '离港', value: dep, color: '#ff69b4' },
         { label: '进港', value: arr, color: '#00f2fe' }
       ];
     },
@@ -2206,9 +2262,17 @@ export default {
   animation: blink 2s infinite;
 }
 .period-badge.peak .dot { background: #f44336; box-shadow: 0 0 8px #f44336; }
-.period-badge.off-peak .dot { background: #4ade80; box-shadow: 0 0 8px #4ade80; }
+.period-badge.off_peak .dot { background: #4ade80; box-shadow: 0 0 8px #4ade80; }
 .period-title { font-weight: 700; color: #e0f7fa; }
 .period-sub { font-size: 10px; color: #8aa; }
+.density-bar-wrap { margin-top: 8px; }
+.density-label { display: flex; justify-content: space-between; font-size: 10px; color: #8aa; margin-bottom: 4px; }
+.density-val { color: #e0f7fa; font-weight: 600; }
+.density-track { height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; overflow: hidden; }
+.density-fill { height: 100%; border-radius: 2px; transition: width .6s ease; }
+.density-fill.peak { background: linear-gradient(90deg, #f44336, #ff5722); }
+.density-fill.normal { background: linear-gradient(90deg, #ff9800, #ffc107); }
+.density-fill.off-peak { background: linear-gradient(90deg, #4ade80, #81c784); }
 
 /* Icon controls */
 .icon-row { display: flex; gap: 6px; justify-content: center; }
@@ -2293,7 +2357,10 @@ export default {
 .pie {
   width: 56px; height: 56px; border-radius: 50%;
   border: 2px solid rgba(255,255,255,0.1);
+  overflow: hidden;
+  display: flex;
 }
+.pie-half { width: 50%; height: 100%; }
 .pie-legend { display: flex; flex-direction: column; gap: 4px; }
 .pie-lv { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #c0d8e8; }
 .pie-lv .dot { width: 8px; height: 8px; border-radius: 50%; }
@@ -2430,6 +2497,7 @@ export default {
 .alt-card.active { border-color: #4facfe; background: rgba(79,172,254,0.1); }
 .alt-rank { font-size: 12px; font-weight: 700; color: #e0f7fa; margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
 .tag { font-size: 9px; padding: 1px 6px; border-radius: 4px; background: rgba(74,222,128,0.2); color: #4ade80; }
+.tag.conflict { background: rgba(244,67,54,0.2); color: #f44336; }
 .alt-stat { font-size: 11px; color: #8aa; margin-bottom: 8px; }
 .alt-actions { display: flex; gap: 6px; }
 .alt-actions button { flex: 1; padding: 5px; font-size: 11px; border: none; border-radius: 4px; cursor: pointer; background: rgba(100,116,139,0.5); color: #fff; }
@@ -2468,7 +2536,7 @@ export default {
 .fid { font-weight: 700; color: #fff; font-size: 12px; }
 .ftype { font-size: 10px; color: #8aa; background: rgba(0,0,0,0.3); padding: 1px 6px; border-radius: 4px; }
 .fop { font-size: 10px; padding: 1px 6px; border-radius: 4px; font-weight: 600; }
-.fop.departure { background: rgba(79,172,254,0.15); color: #4facfe; }
+.fop.departure { background: rgba(255,105,180,0.15); color: #ff69b4; }
 .fop.arrival { background: rgba(0,242,254,0.15); color: #00f2fe; }
 .flight-mid { display: flex; gap: 8px; flex-wrap: wrap; color: #8aa; font-size: 10px; }
 .flight-mid .warn { color: #ff9800; }
