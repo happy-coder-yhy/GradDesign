@@ -343,15 +343,15 @@
           <div class="d-bars">
             <div class="d-row">
               <span :title="statistics ? '平均延误: ' + (statistics.total_delay/statistics.flight_count/60).toFixed(2) + ' 分钟' : '平均延误: 0.00 分钟'">平均延误</span>
-              <div class="d-track"><div class="d-fill" :style="{ width: Math.min(100, (statistics?(statistics.total_delay/statistics.flight_count/60):0)*10)+'%' }"></div></div>
+              <div class="d-track"><div class="d-fill" :style="{ width: Math.min(100, (statistics?(statistics.total_delay/statistics.flight_count/60):0)*10)+'%' }"></div><div class="d-tooltip-layer" :title="statistics ? '平均延误: ' + (statistics.total_delay/statistics.flight_count/60).toFixed(2) + ' 分钟' : '平均延误: 0.00 分钟'"></div></div>
             </div>
             <div class="d-row">
               <span :title="statistics ? '平均距离: ' + (statistics.total_distance/statistics.flight_count/1000).toFixed(2) + ' km' : '平均距离: 0.00 km'">平均距离</span>
-              <div class="d-track"><div class="d-fill blue" :style="{ width: Math.min(100, (statistics?(statistics.total_distance/statistics.flight_count/100):0))+'%' }"></div></div>
+              <div class="d-track"><div class="d-fill blue" :style="{ width: Math.min(100, (statistics?(statistics.total_distance/statistics.flight_count/100):0))+'%' }"></div><div class="d-tooltip-layer" :title="statistics ? '平均距离: ' + (statistics.total_distance/statistics.flight_count/1000).toFixed(2) + ' km' : '平均距离: 0.00 km'"></div></div>
             </div>
             <div class="d-row">
               <span :title="statistics ? '平均时间: ' + (statistics.total_time/statistics.flight_count/60).toFixed(2) + ' 分钟' : '平均时间: 0.00 分钟'">平均时间</span>
-              <div class="d-track"><div class="d-fill cyan" :style="{ width: Math.min(100, (statistics?(statistics.total_time/statistics.flight_count/60):0)*3)+'%' }"></div></div>
+              <div class="d-track"><div class="d-fill cyan" :style="{ width: Math.min(100, (statistics?(statistics.total_time/statistics.flight_count/60):0)*3)+'%' }"></div><div class="d-tooltip-layer" :title="statistics ? '平均时间: ' + (statistics.total_time/statistics.flight_count/60).toFixed(2) + ' 分钟' : '平均时间: 0.00 分钟'"></div></div>
             </div>
           </div>
         </div>
@@ -2433,8 +2433,9 @@ export default {
 .d-unit { font-size: 9px; color: #8aa; }
 .d-bars { flex: 1; display: flex; flex-direction: column; gap: 6px; }
 .d-row { display: grid; grid-template-columns: 60px 1fr; align-items: center; gap: 6px; font-size: 11px; color: #8aa; }
-.d-track { height: 6px; background: rgba(0,0,0,0.3); border-radius: 3px; overflow: hidden; }
+.d-track { position: relative; height: 6px; background: rgba(0,0,0,0.3); border-radius: 3px; overflow: hidden; }
 .d-fill { height: 100%; background: linear-gradient(90deg, #ff9800, #ffc107); border-radius: 3px; }
+.d-tooltip-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; cursor: pointer; }
 .d-fill.blue { background: linear-gradient(90deg, #4facfe, #00f2fe); }
 .d-fill.cyan { background: linear-gradient(90deg, #00bcd4, #00f2fe); }
 
