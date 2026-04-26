@@ -243,6 +243,7 @@
                       <span class="fop" :class="flight.operation">{{ flight.operation==='departure'?'离港':'进港' }}</span>
                     </div>
                     <div class="flight-mid" v-if="getScheduleResult(flight.flight_id)">
+                      <span>{{ flight.operation === 'departure' ? '离港' : '进港' }} {{ formatTime(flight.scheduled_time) }}</span>
                       <span>📏 {{ (getScheduleResult(flight.flight_id).total_distance/1000).toFixed(2) }}km</span>
                       <span>⏱ {{ (getScheduleResult(flight.flight_id).total_time/60).toFixed(1) }}min</span>
                       <span :class="{ warn: getScheduleResult(flight.flight_id).delay > 0 }">
@@ -250,7 +251,7 @@
                       </span>
                     </div>
                     <div class="flight-mid" v-else>
-                      <span>计划 {{ formatTime(flight.scheduled_time) }}</span>
+                      <span>{{ flight.operation === 'departure' ? '离港' : '进港' }} {{ formatTime(flight.scheduled_time) }}</span>
                       <span>优先级 {{ flight.priority }}</span>
                     </div>
                   </div>

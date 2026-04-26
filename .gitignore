@@ -81,8 +81,12 @@ GraduationDesign/static/
 
 *.docx
 *.doc
+*.csv
 
 
 prompt.txt
 
+pic/
+
+experiment/
 

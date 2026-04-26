@@ -106,7 +106,7 @@
                 </span>
               </div>
               <div class="detail-row">
-                <span class="label">计划时间:</span>
+                <span class="label">{{ flight.operation === 'departure' ? '离港时间:' : '进港时间:' }}</span>
                 <span class="value">{{ formatTime(flight.scheduled_time) }}</span>
               </div>
               <div class="detail-row">
