@@ -23,10 +23,10 @@
             <span class="kpi-label">冲突数</span>
             <span class="kpi-value" :class="{ danger: allConflicts.length > 0 }">{{ allConflicts.length }}</span>
           </div>
-          <div class="kpi-item">
+          <!-- <div class="kpi-item">
             <span class="kpi-label">计算耗时</span>
             <span class="kpi-value">{{ computeTime }}<small>ms</small></span>
-          </div>
+          </div> -->
           <div class="kpi-item">
             <span class="kpi-label">总距离</span>
             <span class="kpi-value">{{ statistics ? (statistics.total_distance/1000).toFixed(2) : '0.00' }}<small>km</small></span>
