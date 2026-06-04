@@ -1,9 +1,3 @@
-"""
-航班密度分析器
-用于根据单位时间内的航班密度识别高峰期与低峰期
-并提供多目标A*算法权重的动态调整建议
-"""
-
 from typing import List, Dict, TYPE_CHECKING
 from datetime import datetime, timedelta
 import statistics

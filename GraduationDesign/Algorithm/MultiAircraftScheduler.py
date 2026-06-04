@@ -1,19 +1,3 @@
-"""
-多航班滑行路径优化与冲突调度系统
-=====================================
-
-基于参考文献：
-1. 桃园机场TPE的FCFS调度策略
-2. Weiszer et al. - 多目标优化
-3. 大型机场航空器动态滑行调度研究
-
-主要功能：
-- 多航班时空冲突检测
-- FCFS和优先级调度策略
-- 动态路径规划
-- 冲突消解（等待、重规划、速度调整）
-"""
-
 import heapq
 import math
 from typing import List, Dict, Tuple, Optional, Set

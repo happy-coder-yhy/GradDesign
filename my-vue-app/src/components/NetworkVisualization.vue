@@ -91,7 +91,7 @@
     </div>
 
     <div v-if="nodesLoaded" class="info success">
-      ✅ 已加载路网数据（{{ nodeCounts.stands }}个机位 + {{ edges.length }}条道路）
+      ✅ 已加载路网数据
     </div>
 
     <div class="canvas-container">
@@ -132,17 +132,17 @@
     <div class="legend">
       <div class="legend-section">
         <h4>📍 节点</h4>
-        <span class="legend-item"><span class="legend-box standpoint-box"></span>机位 ({{ nodeCounts.stands }}个)</span>
-        <span class="legend-item"><span class="legend-box runway-box"></span>跑道点 ({{ nodeCounts.runways }}个)</span>
-        <span class="legend-item"><span class="legend-box observation-box"></span>观察点 ({{ nodeCounts.observations }}个)</span>
+        <span class="legend-item"><span class="legend-box standpoint-box"></span>机位点</span>
+        <span class="legend-item"><span class="legend-box runway-box"></span>跑道点</span>
+        <span class="legend-item"><span class="legend-box observation-box"></span>观察点</span>
       </div>
       <div class="legend-section">
         <h4>🛣️ 道路连接</h4>
-        <span class="legend-item"><span class="legend-line aircraftroad-line"></span>滑行道 ({{ edgeCounts.aircraftRoad }}条)</span>
-        <span class="legend-item"><span class="legend-line networkroad-line"></span>路网道路 ({{ edgeCounts.networkRoad }}条)</span>
-        <span class="legend-item"><span class="legend-line externalroad-line"></span>场外道路 ({{ edgeCounts.externalRoad }}条)</span>
-        <span class="legend-item"><span class="legend-line servicevehicle-line"></span>保障车辆道路 ({{ edgeCounts.serviceVehicle }}条)</span>
-        <span class="legend-item"><span class="legend-line perimeterroad-line"></span>围场路 ({{ edgeCounts.perimeterRoad }}条)</span>
+        <span class="legend-item"><span class="legend-line aircraftroad-line"></span>滑行道 </span>
+        <span class="legend-item"><span class="legend-line networkroad-line"></span>路网道路</span>
+        <span class="legend-item"><span class="legend-line externalroad-line"></span>场外道路</span>
+        <span class="legend-item"><span class="legend-line servicevehicle-line"></span>保障车辆道路</span>
+        <span class="legend-item"><span class="legend-line perimeterroad-line"></span>围场路</span>
       </div>
       <div class="legend-section">
         <h4>🎯 算法结果</h4>
